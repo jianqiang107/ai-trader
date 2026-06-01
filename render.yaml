@@ -1,0 +1,25 @@
+# Render 部署配置
+# 在 render.com 导入此仓库后自动识别此文件
+
+services:
+  - type: web
+    name: ai-trader-api
+    env: python
+    region: singapore  # 亚太节点，延迟更低
+    plan: free
+    branch: main
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: ENVIRONMENT
+        value: production
+
+  # 免费 PostgreSQL（可选，后续启用）
+  # - type: psql
+  #   name: ai-trader-db
+  #   plan: free
+  #   region: singapore
+  #   version: 16
