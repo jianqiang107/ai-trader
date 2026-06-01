@@ -8,12 +8,28 @@ function generateIndices(): IndexData[] {
     const change_pct = +(Math.random() * 3 - 1.2).toFixed(2);
     const price = +(idx.base * (1 + change_pct / 100)).toFixed(2);
     const change_amount = +(idx.base * change_pct / 100).toFixed(2);
+    const open = +(idx.base * (1 + (Math.random() - 0.5) * 0.01)).toFixed(2);
+    const high = +(Math.max(price, open) * (1 + Math.random() * 0.005)).toFixed(2);
+    const low = +(Math.min(price, open) * (1 - Math.random() * 0.005)).toFixed(2);
+    const pre_close = +idx.base.toFixed(2);
+    const volume = Math.floor(Math.random() * 50000000 + 10000000);
+    const amount = Math.floor(Math.random() * 5000000000 + 1000000000);
+    const amplitude = +((high - low) / pre_close * 100).toFixed(2);
+    const volume_ratio = +(Math.random() * 1.5 + 0.5).toFixed(2);
     return {
       name: idx.name,
       code: idx.code,
       price,
       change_pct,
       change_amount,
+      open,
+      high,
+      low,
+      pre_close,
+      volume,
+      amount,
+      amplitude,
+      volume_ratio,
     };
   });
 }

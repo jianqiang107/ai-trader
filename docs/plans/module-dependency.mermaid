@@ -1,0 +1,44 @@
+graph TD
+    subgraph 数据源层
+        AK[AKShare API]
+        DB[(SQLite / aiosqlite)]
+    end
+
+    subgraph 服务层
+        AS[akshare_service<br/>行情数据]
+        FS[factor_service<br/>因子计算引擎]
+        SS[signal_service<br/>信号生成引擎]
+        US[user_service<br/>用户认证]
+        STS[strategy_service<br/>策略服务]
+    end
+
+    subgraph 调度层
+        SCH[APScheduler<br/>定时任务]
+    end
+
+    subgraph 接口层
+        MR[market.py<br/>行情路由]
+        SR[signal.py<br/>信号路由]
+        STR[strategy.py<br/>策略路由]
+        UR[user.py<br/>用户路由]
+        AUTH[auth.py<br/>JWT 中间件]
+    end
+
+    AK --> AS
+    AS --> FS
+    FS --> SS
+    FS --> DB
+    SS --> DB
+    US --> DB
+    STS --> DB
+    SCH --> FS
+    SCH --> SS
+
+    MR --> AS
+    SR --> SS
+    STR --> STS
+    UR --> US
+
+    SR --> AUTH
+    STR --> AUTH
+    UR -.->|login/register 不需要| AUTH

@@ -1,0 +1,102 @@
+erDiagram
+    users ||--o{ signals : "可见信号"
+    users ||--o{ user_subscriptions : "订阅"
+    users ||--|| user_alert_settings : "预警设置"
+    users ||--o{ user_watchlist : "自选"
+    users ||--o{ notifications : "通知"
+    strategies ||--o{ signals : "产出信号"
+    strategies ||--o{ factor_states : "因子状态"
+    strategies ||--o{ user_subscriptions : "被订阅"
+
+    users {
+        string id PK
+        string phone UK
+        string nickname
+        string avatar
+        string plan
+        datetime plan_expires_at
+        boolean auto_renew
+        datetime created_at
+        datetime updated_at
+    }
+
+    strategies {
+        string id PK
+        string name
+        string type
+        string description
+        float total_return
+        float win_rate
+        float max_drawdown
+        float sharpe_ratio
+        float sortino_ratio
+        float calmar_ratio
+        int running_days
+        int signal_count
+        string required_plan
+        boolean is_active
+        datetime created_at
+        datetime updated_at
+    }
+
+    signals {
+        string id PK
+        string stock_code
+        string stock_name
+        string signal_type
+        string strategy_id FK
+        datetime signal_time
+        float signal_price
+        string mode
+        int confidence
+        string status
+        float stop_loss_price
+        float take_profit_price
+        string alert_status
+        float actual_pnl
+        datetime created_at
+        datetime updated_at
+    }
+
+    factor_states {
+        int id PK
+        string strategy_id FK
+        string label
+        float value
+        float change
+        string status
+        datetime calculated_at
+    }
+
+    user_subscriptions {
+        string id PK
+        string user_id FK
+        string strategy_id FK
+        datetime subscribed_at
+    }
+
+    user_alert_settings {
+        int id PK
+        string user_id FK_UK
+        float stop_loss_pct
+        float take_profit_pct
+        string alert_method
+        string alert_frequency
+    }
+
+    user_watchlist {
+        int id PK
+        string user_id FK
+        string stock_code
+        datetime added_at
+    }
+
+    notifications {
+        string id PK
+        string user_id FK
+        string type
+        string title
+        string content
+        boolean read
+        datetime created_at
+    }

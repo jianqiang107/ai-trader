@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant SCH as APScheduler
+    participant FS as factor_service
+    participant SS as signal_service
+    participant DB as Database
+
+    SCH->>FS: 触发因子计算（收盘/盘中）
+    FS->>FS: 获取 AKShare 行情数据
+    FS->>FS: 计算 7 大因子分值
+    FS->>DB: 保存 FactorState[]
+    FS->>SS: 因子更新完成，触发信号评估
+
+    SS->>DB: 查询所有活跃策略
+    loop 每个策略
+        SS->>DB: 查询策略最新因子
+        SS->>SS: 评估策略规则是否触发
+        alt 买入信号触发
+            SS->>SS: 计算置信度
+            SS->>SS: 计算默认止损止盈价
+            SS->>DB: 创建 Signal (status=pending)
+        else 卖出信号触发
+            SS->>DB: 查找该策略下 holding 信号
+            SS->>DB: 更新信号 status=closed, actual_pnl
+        end
+    end

@@ -25,6 +25,14 @@ export interface IndexData {
   price: number;
   change_pct: number;
   change_amount: number;
+  open: number;
+  high: number;
+  low: number;
+  pre_close: number;
+  volume: number;
+  amount: number;
+  amplitude: number;
+  volume_ratio: number;
 }
 
 /** 自选项 */

@@ -14,49 +14,60 @@ from services.cache_service import cache
 
 # ---------- 指数数据 ----------
 
-# 关注的指数（东方财富代码, 名称）
-INDEX_MAP = {
-    "000001.SH": ("1.000001", "上证指数"),
-    "399001.SZ": ("0.399001", "深证成指"),
-    "399006.SZ": ("0.399006", "创业板指"),
-    "000688.SH": ("1.000688", "科创50"),
-    "000300.SH": ("1.000300", "沪深300"),
+# 需要的 5 个核心指数：短代码 → 名称
+TARGET_INDICES = {
+    "000001": "上证指数",
+    "399001": "深证成指",
+    "399006": "创业板指",
+    "000688": "科创50",
+    "000300": "沪深300",
 }
 
 
 def _fmt_index(row: pd.Series, code: str = "", name: str = "") -> dict:
-    """格式化指数行数据 → 前端 IndexData 类型"""
+    """格式化指数行数据 → 前端 IndexData 类型（含完整行情字段）"""
     return {
         "code": code or str(row.get("代码", "")),
         "name": name or str(row.get("名称", "")),
         "price": float(row.get("最新价", 0) or 0),
         "change_pct": float(row.get("涨跌幅", 0) or 0),
         "change_amount": float(row.get("涨跌额", 0) or 0),
+        "open": float(row.get("今开", 0) or 0),
+        "high": float(row.get("最高", 0) or 0),
+        "low": float(row.get("最低", 0) or 0),
+        "pre_close": float(row.get("昨收", 0) or 0),
+        "volume": float(row.get("成交量", 0) or 0),
+        "amount": float(row.get("成交额", 0) or 0),
+        "amplitude": float(row.get("振幅", 0) or 0),
+        "volume_ratio": float(row.get("量比", 0) or 0),
     }
 
 
 def get_indices() -> list[dict]:
-    """获取实时大盘指数"""
+    """获取实时大盘指数（上证/深证/创业板/科创50/沪深300）
+
+    数据源: stock_zh_index_spot_em (东方财富)
+    - symbol="沪深重要指数" → 上证/深证/创业板/沪深300
+    - symbol="上证系列指数" → 科创50
+    """
     cached = cache.get("indices")
     if cached:
         return cached
 
     try:
-        df = ak.stock_zh_index_spot_em()
-        result = []
+        # 两次调用覆盖全部 5 个目标指数
+        df_main = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
+        df_sh = ak.stock_zh_index_spot_em(symbol="上证系列指数")
 
-        for wind_code, (em_code, name_zh) in INDEX_MAP.items():
-            short_code = em_code.split(".")[1]
-            # 优先用代码匹配
-            match = df[df["代码"].astype(str).str.contains(short_code)] if "代码" in df.columns else pd.DataFrame()
+        # 合并去重（以代码为准）
+        all_df = pd.concat([df_main, df_sh]).drop_duplicates(subset=["代码"])
+
+        result = []
+        for short_code, name_zh in TARGET_INDICES.items():
+            match = all_df[all_df["代码"].astype(str) == short_code]
             if not match.empty:
+                wind_code = f"{short_code}.{_guess_market(short_code)}"
                 result.append(_fmt_index(match.iloc[0], code=wind_code, name=name_zh))
-            else:
-                # fallback: 名称匹配
-                name_short = name_zh.replace("指数", "").replace("指", "")
-                match = df[df["名称"].str.contains(name_short)] if "名称" in df.columns else pd.DataFrame()
-                if not match.empty:
-                    result.append(_fmt_index(match.iloc[0], code=wind_code, name=name_zh))
 
         cache.set("indices", result, ttl=60)  # 指数缓存 1 分钟
         return result
