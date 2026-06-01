@@ -1,0 +1,14 @@
+[
+  {"code":"S01","name":"氢概念","type":"concept","change_pct":5.23,"up_count":38,"down_count":12,"net_inflow":12.56,"turnover_rate":4.52,"representative_stocks":["600160","605020"]},
+  {"code":"S02","name":"半导体","type":"concept","change_pct":3.89,"up_count":45,"down_count":18,"net_inflow":8.34,"turnover_rate":3.89,"representative_stocks":["002415","000725"]},
+  {"code":"S03","name":"AI算力","type":"concept","change_pct":6.12,"up_count":52,"down_count":8,"net_inflow":18.90,"turnover_rate":5.67,"representative_stocks":["002230","300750"]},
+  {"code":"S04","name":"新能源","type":"industry","change_pct":2.45,"up_count":35,"down_count":22,"net_inflow":5.67,"turnover_rate":3.21,"representative_stocks":["002594","300750"]},
+  {"code":"S05","name":"医药","type":"industry","change_pct":-0.89,"up_count":18,"down_count":32,"net_inflow":-3.45,"turnover_rate":2.15,"representative_stocks":["600276","000651"]},
+  {"code":"S06","name":"消费","type":"industry","change_pct":1.23,"up_count":28,"down_count":25,"net_inflow":2.34,"turnover_rate":1.89,"representative_stocks":["600519","000858"]},
+  {"code":"S07","name":"军工","type":"concept","change_pct":-1.56,"up_count":15,"down_count":35,"net_inflow":-5.89,"turnover_rate":2.67,"representative_stocks":["002475"]},
+  {"code":"S08","name":"有色金属","type":"industry","change_pct":4.56,"up_count":42,"down_count":15,"net_inflow":9.12,"turnover_rate":4.23,"representative_stocks":["601899","600547"]},
+  {"code":"S09","name":"光伏","type":"concept","change_pct":-2.34,"up_count":12,"down_count":38,"net_inflow":-7.56,"turnover_rate":3.45,"representative_stocks":["600309"]},
+  {"code":"S10","name":"储能","type":"concept","change_pct":3.12,"up_count":32,"down_count":18,"net_inflow":6.78,"turnover_rate":3.89,"representative_stocks":["000725"]},
+  {"code":"S11","name":"芯片","type":"concept","change_pct":2.89,"up_count":38,"down_count":20,"net_inflow":7.45,"turnover_rate":4.12,"representative_stocks":["002415"]},
+  {"code":"S12","name":"数字经济","type":"concept","change_pct":1.78,"up_count":25,"down_count":22,"net_inflow":3.56,"turnover_rate":2.89,"representative_stocks":["002230"]}
+]
