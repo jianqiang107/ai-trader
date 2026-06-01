@@ -10,7 +10,9 @@ function MswProvider({ children }: { children: React.ReactNode }) {
   const [mswReady, setMswReady] = useState(false);
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    // 当 VITE_USE_MSW=false 时跳过 MSW，直接走真实后端 API
+    const useMsw = import.meta.env.VITE_USE_MSW !== 'false';
+    if (import.meta.env.DEV && useMsw) {
       import('./mock/browser').then(({ initMockBrowser }) => {
         initMockBrowser().then(() => setMswReady(true));
       });

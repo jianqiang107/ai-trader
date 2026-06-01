@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+backend/venv/
 
 # Build output
 dist/
@@ -31,3 +32,8 @@ coverage/
 
 # MSW
 public/mockServiceWorker.js
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
