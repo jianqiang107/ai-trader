@@ -33,8 +33,11 @@ def _em_session():
     return _EM_SESSION
 
 
-def _em_get(url: str, params: dict = None, timeout: int = 15, retries: int = 2) -> dict:
-    """调用东方财富 API，返回 JSON dict"""
+def _em_get(url: str, params: dict = None, timeout: int = 10, retries: int = 1) -> dict:
+    """调用东方财富 API，返回 JSON dict
+    timeout: 超时秒数 (默认10s)
+    retries: 重试次数 (默认1次)
+    """
     last_err = None
     for attempt in range(retries + 1):
         try:
@@ -261,7 +264,7 @@ def get_kline(code: str, period: str = "daily") -> list[dict]:
             "end": end,
             "ut": "bd1d9ddb04089700cf9c27f6f7426281",
         }
-        data = _em_get(EM_KLINE_URL, params)
+        data = _em_get(EM_KLINE_URL, params, timeout=5, retries=1)
         klines = data.get("data", {}).get("klines", [])
 
         if not klines:
@@ -336,7 +339,7 @@ def get_fenshi(code: str) -> list[dict]:
             "secid": secid,
             "ut": "bd1d9ddb04089700cf9c27f6f7426281",
         }
-        data = _em_get(EM_TRENDS_URL, params)
+        data = _em_get(EM_TRENDS_URL, params, timeout=8, retries=1)
         trends = data.get("data", {}).get("trends", [])
 
         if not trends:
@@ -369,6 +372,18 @@ def _mock_stock_list(page: int = 1, page_size: int = 50) -> dict:
         ("600276", "恒瑞医药", "SH"), ("300059", "东方财富", "SZ"), ("601166", "兴业银行", "SH"),
         ("600900", "长江电力", "SH"), ("000333", "美的集团", "SZ"), ("601888", "中国中免", "SH"),
         ("300015", "爱尔眼科", "SZ"), ("002415", "海康威视", "SZ"), ("600309", "万华化学", "SH"),
+        ("000002", "万科A", "SZ"), ("600030", "中信证券", "SH"), ("002714", "牧原股份", "SZ"),
+        ("300124", "汇川技术", "SZ"), ("601012", "隆基绿能", "SH"), ("600809", "山西汾酒", "SH"),
+        ("002475", "立讯精密", "SZ"), ("300274", "阳光电源", "SZ"), ("600585", "海螺水泥", "SH"),
+        ("000651", "格力电器", "SZ"), ("603259", "药明康德", "SH"), ("002304", "洋河股份", "SZ"),
+        ("300760", "迈瑞医疗", "SZ"), ("600887", "伊利股份", "SH"), ("000725", "京东方A", "SZ"),
+        ("601899", "紫金矿业", "SH"), ("002594", "比亚迪", "SZ"), ("300498", "温氏股份", "SZ"),
+        ("600050", "中国联通", "SH"), ("000063", "中兴通讯", "SZ"), ("601088", "中国神华", "SH"),
+        ("002142", "宁波银行", "SZ"), ("600048", "保利发展", "SH"), ("300122", "智飞生物", "SZ"),
+        ("601398", "工商银行", "SH"), ("000568", "泸州老窖", "SZ"), ("600570", "恒生电子", "SH"),
+        ("002230", "科大讯飞", "SZ"), ("600438", "通威股份", "SH"), ("300033", "同花顺", "SZ"),
+        ("601668", "中国建筑", "SH"), ("000596", "古井贡酒", "SZ"), ("600745", "闻泰科技", "SH"),
+        ("002027", "分众传媒", "SZ"), ("300413", "芒果超媒", "SZ"),
     ]
     items = []
     for code, name, mkt in stocks:
@@ -430,7 +445,7 @@ def get_stock_list(page: int = 1, page_size: int = 50, sort_by: str = "change_pc
             "fs": ALL_STOCK_FS,
             "fields": SPOT_FIELDS,
         }
-        data = _em_get(EM_CLIST_URL, params)
+        data = _em_get(EM_CLIST_URL, params, timeout=10, retries=1)
         items_raw = data.get("data", {}).get("diff", [])
         total = data.get("data", {}).get("total", 0)
 
@@ -558,7 +573,7 @@ def get_sectors(sector_type: str = "concept") -> list[dict]:
             "fs": fs_code,
             "fields": "f2,f3,f4,f8,f12,f14,f104,f105,f128",
         }
-        data = _em_get(EM_CLIST_URL, params)
+        data = _em_get(EM_CLIST_URL, params, timeout=8, retries=1)
         items = data.get("data", {}).get("diff", [])
 
         result = []
@@ -578,7 +593,36 @@ def get_sectors(sector_type: str = "concept") -> list[dict]:
         return result
     except Exception as e:
         print(f"[EM] get_sectors({sector_type}) failed: {e}")
-        return []
+        return _mock_sectors()
+
+
+def _mock_sectors() -> list[dict]:
+    """模拟板块数据"""
+    sectors = [
+        ("半导体", "BK1036"), ("人工智能", "BK1057"), ("新能源车", "BK0900"),
+        ("光伏", "BK1078"), ("锂电池", "BK0933"), ("白酒", "BK0477"),
+        ("医疗器械", "BK0819"), ("Chiplet", "BK1164"), ("数字经济", "BK1159"),
+        ("东数西算", "BK1148"), ("信创", "BK1105"), ("机器人", "BK1210"),
+        ("集成电路", "BK9812"), ("消费电子", "BK1072"), ("创新药", "BK0846"),
+        ("军工", "BK0595"), ("信息安全", "BK0705"), ("元宇宙", "BK1131"),
+        ("算力", "BK1168"), ("液冷服务器", "BK1238"), ("数据要素", "BK1189"),
+        ("华为概念", "BK2222"), ("智能汽车", "BK3333"), ("6G", "BK4444"),
+        ("储能", "BK1090"), ("氢能源", "BK1112"), ("5G", "BK0704"),
+        ("物联网", "BK0711"), ("国产软件", "BK1026"), ("云计算", "BK0963"),
+    ]
+    result = []
+    for name, code in sectors:
+        result.append({
+            "name": name,
+            "code": code,
+            "change_pct": round(random.uniform(-5, 8), 2),
+            "up_count": random.randint(3, 30),
+            "down_count": random.randint(2, 25),
+            "turnover_rate": round(random.uniform(0.5, 6.0), 2),
+            "lead_stock": random.choice(["贵州茅台", "宁德时代", "中兴通讯", "科大讯飞", "比亚迪"]),
+        })
+    result.sort(key=lambda x: x["change_pct"], reverse=True)
+    return result
 
 
 # ---------- 资金流向 ----------
@@ -598,7 +642,7 @@ def get_fund_flow(code: str) -> dict:
             "secid": secid,
             "ut": "bd1d9ddb04089700cf9c27f6f7426281",
         }
-        data = _em_get("https://push2.eastmoney.com/api/qt/stock/fflow/kline/get", params)
+        data = _em_get("https://push2.eastmoney.com/api/qt/stock/fflow/kline/get", params, timeout=8, retries=1)
         klines = data.get("data", {}).get("klines", [])
 
         if not klines:
@@ -645,7 +689,7 @@ def get_north_flow() -> dict:
             "fields1": "f1,f2,f3,f4",
             "fields2": "f51,f52,f53,f54",
             "ut": "bd1d9ddb04089700cf9c27f6f7426281",
-        })
+        }, timeout=8, retries=1)
         items = data.get("data", {}).get("diff", [])
         if items:
             item = items[0]

@@ -18,7 +18,7 @@ export default function SectorsPage() {
       try {
         const params: Record<string, string> = {};
         if (activeType !== 'all') params.type = activeType;
-        const data: unknown = await api.get('/sectors', { params });
+        const data: unknown = await api.get('/market/sectors', { params });
         setSectors(data as Sector[]);
       } catch (e) {
         console.error('Failed to fetch sectors:', e);

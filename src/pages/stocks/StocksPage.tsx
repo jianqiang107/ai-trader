@@ -19,8 +19,9 @@ export default function StocksPage() {
       try {
         const params: Record<string, string> = {};
         if (activeMode !== 'all') params.mode = activeMode;
-        const data: unknown = await api.get('/stocks', { params });
-        setStocks(data as Stock[]);
+        const data: unknown = await api.get('/market/stocks', { params });
+        const StockData = data as { items: Stock[]; total: number };
+        setStocks(StockData.items || []);
       } catch (e) {
         console.error('Failed to fetch stocks:', e);
       } finally {
