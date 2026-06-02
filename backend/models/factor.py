@@ -5,7 +5,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Float, DateTime, ForeignKey
+from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -25,7 +25,7 @@ class FactorState(Base):
     change: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="neutral", nullable=False)
     calculated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default="CURRENT_TIMESTAMP", nullable=False
+        DateTime, server_default=func.now(), nullable=False
     )
 
     # 关系

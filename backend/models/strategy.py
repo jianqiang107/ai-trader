@@ -5,7 +5,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base, TimestampMixin, generate_uuid
@@ -60,7 +60,7 @@ class UserSubscription(Base):
         String(36), ForeignKey("strategies.id", ondelete="CASCADE"), nullable=False, index=True
     )
     subscribed_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default="CURRENT_TIMESTAMP", nullable=False
+        DateTime, server_default=func.now(), nullable=False
     )
 
     # 关系

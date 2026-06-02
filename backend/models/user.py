@@ -5,7 +5,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base, TimestampMixin, generate_uuid
@@ -70,7 +70,7 @@ class UserWatchlist(Base):
     )
     stock_code: Mapped[str] = mapped_column(String(20), nullable=False)
     added_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default="CURRENT_TIMESTAMP", nullable=False
+        DateTime, server_default=func.now(), nullable=False
     )
 
     # 关系
@@ -93,7 +93,7 @@ class Notification(Base):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default="CURRENT_TIMESTAMP", nullable=False
+        DateTime, server_default=func.now(), nullable=False
     )
 
     # 关系
