@@ -2,6 +2,7 @@
 
 端点列表:
   GET /api/market/indices       - 大盘指数
+  GET /api/market/diagnose      - 诊断 akshare 状态（仅开发/调试用）
   GET /api/market/kline         - K线数据 (?code=600519.SH&period=daily)
   GET /api/market/fenshi        - 分时数据 (?code=600519.SH)
   GET /api/market/volfs         - 量能数据 (?code=600519.SH) [mock fallback]
@@ -13,6 +14,7 @@
 """
 import math
 import random
+import traceback
 from fastapi import APIRouter, Query
 from services import akshare_service as svc
 
@@ -26,6 +28,37 @@ def get_indices():
     """获取实时大盘指数（上证/深证/创业板/科创50/沪深300）"""
     data = svc.get_indices()
     return {"code": 0, "data": data, "message": "ok"}
+
+
+# ---------- AKShare 诊断（调试端点）----------
+
+@router.get("/diagnose")
+def diagnose_akshare():
+    """诊断 akshare 是否可用，排查行情数据为空的原因"""
+    result = {"akshare_importable": False, "akshare_version": None,
+              "test_call_ok": False, "test_data_rows": 0,
+              "error": None, "traceback": None}
+    try:
+        import akshare as ak
+        result["akshare_importable"] = True
+        result["akshare_version"] = getattr(ak, "__version__", "unknown")
+    except Exception as e:
+        result["error"] = f"import akshare failed: {e}"
+        result["traceback"] = traceback.format_exc()
+        return result
+
+    try:
+        df = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
+        result["test_call_ok"] = True
+        result["test_data_rows"] = len(df) if df is not None else 0
+        if df is not None and not df.empty:
+            result["columns"] = list(df.columns)
+            result["sample"] = df.head(2).to_dict("records")
+    except Exception as e:
+        result["error"] = f"API call failed: {e}"
+        result["traceback"] = traceback.format_exc()
+
+    return result
 
 
 # ---------- K线数据 ----------
