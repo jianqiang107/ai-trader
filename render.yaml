@@ -8,7 +8,7 @@ services:
     region: singapore  # 亚太节点，延迟更低
     plan: free
     branch: main
-    buildCommand: cd backend && pip install -r requirements.txt
+    buildCommand: cd backend && pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir -r requirements-akshare.txt || true
     startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:

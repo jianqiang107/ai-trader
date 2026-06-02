@@ -6,10 +6,32 @@
 
 部署注意：需在沙箱外运行（云服务器/Docker），沙箱环境限制金融 API 访问
 """
-import akshare as ak
+from __future__ import annotations  # 所有类型注解懒加载，避免运行时 import
+
 import pandas as pd
 from datetime import timedelta, date
 from services.cache_service import cache
+
+# akshare 懒加载：仅在调用数据 API 时才导入
+# 避免顶层 import 在 Render 等平台上因依赖缺失炸掉整个应用启动
+_ak = None
+_ak_import_error: Exception | None = None
+
+
+def _get_ak():
+    """懒加载 akshare，首次调用时导入，失败时抛出原始错误"""
+    global _ak, _ak_import_error
+    if _ak is not None:
+        return _ak
+    if _ak_import_error is not None:
+        raise RuntimeError(f"akshare 导入失败: {_ak_import_error}") from _ak_import_error
+    try:
+        import akshare as ak_mod
+        _ak = ak_mod
+        return _ak
+    except Exception as e:
+        _ak_import_error = e
+        raise RuntimeError(f"akshare 导入失败: {e}") from e
 
 
 # ---------- 指数数据 ----------
@@ -56,8 +78,8 @@ def get_indices() -> list[dict]:
 
     try:
         # 两次调用覆盖全部 5 个目标指数
-        df_main = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
-        df_sh = ak.stock_zh_index_spot_em(symbol="上证系列指数")
+        df_main = _get_ak().stock_zh_index_spot_em(symbol="沪深重要指数")
+        df_sh = _get_ak().stock_zh_index_spot_em(symbol="上证系列指数")
 
         # 合并去重（以代码为准）
         all_df = pd.concat([df_main, df_sh]).drop_duplicates(subset=["代码"])
@@ -95,7 +117,7 @@ def get_kline(code: str, period: str = "daily") -> list[dict]:
         end = date.today().strftime("%Y%m%d")
         start = (date.today() - timedelta(days=200)).strftime("%Y%m%d")
 
-        df = ak.stock_zh_a_hist(
+        df = _get_ak().stock_zh_a_hist(
             symbol=symbol,
             period=period,
             start_date=start,
@@ -147,7 +169,7 @@ def get_fenshi(code: str) -> list[dict]:
 
     try:
         symbol = code.split(".")[0]
-        df = ak.stock_zh_a_minute(symbol=symbol, period="1")
+        df = _get_ak().stock_zh_a_minute(symbol=symbol, period="1")
 
         if df is None or df.empty:
             return []
@@ -179,9 +201,9 @@ def get_sectors(sector_type: str = "concept") -> list[dict]:
 
     try:
         if sector_type == "industry":
-            df = ak.stock_board_industry_name_em()
+            df = _get_ak().stock_board_industry_name_em()
         else:
-            df = ak.stock_board_concept_name_em()
+            df = _get_ak().stock_board_concept_name_em()
 
         if df is None or df.empty:
             return []
@@ -218,7 +240,7 @@ def get_fund_flow(code: str) -> dict:
     try:
         symbol = code.split(".")[0]
         market = "sh" if code.endswith(".SH") else "sz"
-        df = ak.stock_individual_fund_flow(stock=symbol, market=market)
+        df = _get_ak().stock_individual_fund_flow(stock=symbol, market=market)
 
         if df is None or df.empty:
             return {}
@@ -252,7 +274,7 @@ def get_stock_quote(code: str) -> dict:
 
     try:
         symbol = code.split(".")[0]
-        df = ak.stock_zh_a_spot_em()
+        df = _get_ak().stock_zh_a_spot_em()
 
         match = df[df["代码"].astype(str) == symbol]
         if match.empty:
@@ -294,7 +316,7 @@ def get_stock_list(page: int = 1, page_size: int = 50, sort_by: str = "change_pc
         return cached
 
     try:
-        df = ak.stock_zh_a_spot_em()
+        df = _get_ak().stock_zh_a_spot_em()
         if df is None or df.empty:
             return {"items": [], "total": 0, "page": page, "page_size": page_size}
 
@@ -352,7 +374,7 @@ def get_north_flow() -> dict:
         return cached
 
     try:
-        df = ak.stock_hsgt_north_net_flow_in_em(symbol="北向")
+        df = _get_ak().stock_hsgt_north_net_flow_in_em(symbol="北向")
         if df is None or df.empty:
             return {}
 
