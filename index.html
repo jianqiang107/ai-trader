@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/ai-trader/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI交易大师</title>
+    <script>
+      // SPA routing: restore path from 404.html redirect
+      (function() {
+        var l = window.location;
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          }).join('?');
+          var q = decoded.indexOf('?');
+          var hash = l.hash;
+          window.history.replaceState(null, null,
+            l.pathname.slice(0, -1) + decoded.slice(1) +
+            (hash ? hash : l.hash)
+          );
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/ai-trader/assets/index-CyHhx3tC.js"></script>
+    <link rel="modulepreload" crossorigin href="/ai-trader/assets/vendor-pGAL-_VH.js">
+    <link rel="modulepreload" crossorigin href="/ai-trader/assets/mui-DAswjEfs.js">
+    <link rel="stylesheet" crossorigin href="/ai-trader/assets/index-TwCpIZza.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
