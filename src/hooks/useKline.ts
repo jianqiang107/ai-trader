@@ -15,14 +15,15 @@ export function useKline(code: string, period: string = 'daily'): UseKlineReturn
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     if (!code) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await marketService.getKline(code, period);
+      const data = await marketService.getKline(code, period, signal);
       setKlineData(data);
     } catch (e) {
+      if (signal?.aborted) return; // Ignore cancelled requests
       setError(e instanceof Error ? e.message : '加载K线数据失败');
     } finally {
       setLoading(false);
@@ -30,7 +31,9 @@ export function useKline(code: string, period: string = 'daily'): UseKlineReturn
   }, [code, period]);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   return { klineData, loading, error, refresh: fetchData };

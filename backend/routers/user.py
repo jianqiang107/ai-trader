@@ -1,4 +1,4 @@
-"""用户路由 — 发送验证码 / 注册 / 登录 / 刷新 Token"""
+"""用户路由 — 发送验证码 / 注册 / 登录 / 刷新 Token / 资料 / 通知 / 预警设置"""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,3 +57,21 @@ async def refresh_token(req: RefreshTokenRequest, db: AsyncSession = Depends(get
     except ValueError as e:
         return ApiResponse(code=400, data=None, message=str(e))
     return ApiResponse(data=result, message="刷新成功")
+
+
+@router.get("/profile")
+async def get_profile(user: User = Depends(get_current_user)):
+    """获取当前用户资料"""
+    return ApiResponse(data=UserOut.model_validate(user).model_dump())
+
+
+@router.get("/notifications")
+async def get_notifications(user: User = Depends(get_current_user)):
+    """获取用户通知列表 (MVP mock)"""
+    return ApiResponse(data=[])
+
+
+@router.put("/alert-settings")
+async def update_alert_settings(user: User = Depends(get_current_user)):
+    """更新预警设置 (MVP mock)"""
+    return ApiResponse(data=None, message="预警设置已更新")

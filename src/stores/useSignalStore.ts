@@ -67,6 +67,8 @@ export const useSignalStore = create<SignalState>((set, get) => ({
   },
 
   selectStock: (code: string, name: string) => {
+    const current = get().selectedStock;
+    if (current && current.code === code && current.name === name) return;
     set({ selectedStock: { code, name } });
   },
 

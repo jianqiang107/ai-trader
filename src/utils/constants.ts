@@ -54,4 +54,4 @@ export const SECTOR_TYPES = [
 export const STRATEGY_TYPES = ['低吸', '趋势', '突破', '均值回归'] as const;
 
 /** 轮询间隔(ms) */
-export const POLL_INTERVAL = 3000;
+export const POLL_INTERVAL = 30000;

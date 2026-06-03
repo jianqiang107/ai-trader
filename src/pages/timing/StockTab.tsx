@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import DataTable from '../../components/common/DataTable';
 import SignalTag from '../../components/common/SignalTag';
 import { useSignalStore } from '../../stores/useSignalStore';
@@ -33,7 +33,7 @@ export default function StockTab() {
   const selectedStock = useSignalStore((s) => s.selectedStock);
   const [data] = useState(STOCK_MOCK);
 
-  const columns = [
+  const columns = useMemo(() => [
     { key: 'index', title: '序号', width: 40, render: (_: unknown, __: unknown, i: number) => <span className="text-text-muted">{i + 1}</span> },
     { key: 'code', title: '代码', width: 70, render: (v: unknown) => <span className="text-blue">{v as string}</span> },
     { key: 'name', title: '名称', width: 70, render: (v: unknown) => <span className="text-text-primary">{v as string}</span> },
@@ -51,7 +51,7 @@ export default function StockTab() {
         </div>
       );
     }},
-  ];
+  ], []);
 
   return (
     <div className="flex flex-col h-full">

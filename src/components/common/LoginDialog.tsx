@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { authService } from '../../services/authService';
 import type { LoginRequest, RegisterRequest } from '../../types';
 
 interface LoginDialogProps {
@@ -23,12 +24,17 @@ export default function LoginDialog({ open, onClose }: LoginDialogProps) {
 
   if (!open) return null;
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     if (!phone || phone.length !== 11) {
       setError('请输入正确的手机号');
       return;
     }
     setError('');
+    try {
+      await authService.sendVerifyCode(phone);
+    } catch {
+      // MVP 阶段忽略发送失败，验证码固定 123456
+    }
     setCountdown(60);
     const timer = setInterval(() => {
       setCountdown((prev) => {

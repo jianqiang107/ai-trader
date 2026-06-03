@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
+import ProtectedRoute from '../components/auth/ProtectedRoute';
 
 const TimingPage = lazy(() => import('../pages/timing/TimingPage'));
 const PerformancePage = lazy(() => import('../pages/performance/PerformancePage'));
@@ -20,21 +21,36 @@ function LoadingFallback() {
   );
 }
 
+/** 需要认证才能访问的路由列表 */
+const PROTECTED_PATHS = ['/signals', '/watchlist', '/membership'];
+
 export default function AppRouter() {
   return (
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route element={<MainLayout />}>
           <Route path="/" element={<Navigate to="/timing" replace />} />
+          {/* 公开页面：无需认证即可访问 */}
           <Route path="/timing" element={<TimingPage />} />
           <Route path="/performance" element={<PerformancePage />} />
-          <Route path="/signals" element={<SignalsPage />} />
           <Route path="/strategy" element={<StrategyPage />} />
           <Route path="/sectors" element={<SectorsPage />} />
           <Route path="/stocks" element={<StocksPage />} />
-          <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/news" element={<NewsPage />} />
-          <Route path="/membership" element={<MembershipPage />} />
+
+          {/* 受保护页面：需要认证才能访问 */}
+          <Route
+            path="/signals"
+            element={<ProtectedRoute><SignalsPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/watchlist"
+            element={<ProtectedRoute><WatchlistPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/membership"
+            element={<ProtectedRoute><MembershipPage /></ProtectedRoute>}
+          />
         </Route>
       </Routes>
     </Suspense>

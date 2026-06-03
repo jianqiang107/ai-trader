@@ -14,6 +14,7 @@ interface MarketState {
 }
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let indicesFetching = false;
 
 export const useMarketStore = create<MarketState>((set, get) => ({
   indices: [],
@@ -21,6 +22,8 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   marketRegime: 'neutral',
 
   fetchIndices: async () => {
+    if (indicesFetching) return;
+    indicesFetching = true;
     try {
       const data = await marketService.getIndices();
       set({ indices: data });
@@ -30,6 +33,8 @@ export const useMarketStore = create<MarketState>((set, get) => ({
       });
     } catch (e) {
       console.error('Failed to fetch indices:', e);
+    } finally {
+      indicesFetching = false;
     }
   },
 

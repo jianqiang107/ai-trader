@@ -6,8 +6,8 @@ export const marketService = {
   getIndices: (): Promise<IndexData[]> => api.get('/market/indices'),
 
   /** 获取K线数据 (timeout: 20s - push2his API较慢) */
-  getKline: (code: string, period: string = 'daily'): Promise<KLineData[]> =>
-    api.get(`/market/kline`, { params: { code, period }, timeout: 20000 }),
+  getKline: (code: string, period: string = 'daily', signal?: AbortSignal): Promise<KLineData[]> =>
+    api.get(`/market/kline`, { params: { code, period }, timeout: 20000, signal }),
 
   /** 获取分时数据 */
   getFenshi: (code: string): Promise<FenshiData[]> =>

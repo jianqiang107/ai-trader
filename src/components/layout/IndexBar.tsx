@@ -4,15 +4,13 @@ import { formatPrice, formatChangePct } from '../../utils/format';
 
 export default function IndexBar() {
   const indices = useMarketStore((s) => s.indices);
-  const fetchIndices = useMarketStore((s) => s.fetchIndices);
   const startIndexPolling = useMarketStore((s) => s.startIndexPolling);
   const stopIndexPolling = useMarketStore((s) => s.stopIndexPolling);
 
   useEffect(() => {
-    fetchIndices();
     startIndexPolling();
     return () => stopIndexPolling();
-  }, [fetchIndices, startIndexPolling, stopIndexPolling]);
+  }, [startIndexPolling, stopIndexPolling]);
 
   /** 格式化成交额为亿/万亿 */
   const formatAmount = (val: number): string => {

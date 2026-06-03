@@ -108,6 +108,31 @@ def _guess_market(code: str) -> str:
     return "SZ"
 
 
+def _with_stock_ui_fields(stock: dict) -> dict:
+    """补齐前端股票列表展示需要的派生字段。"""
+    code = str(stock.get("code") or "")
+    market = code.split(".")[-1] if "." in code else _guess_market(code)
+    change_pct = float(stock.get("change_pct") or 0)
+    turnover_rate = float(stock.get("turnover_rate") or 0)
+    score = max(0, min(100, round(50 + change_pct * 5 + turnover_rate * 2)))
+
+    signal_tags = []
+    if score >= 70 and change_pct < 1:
+        signal_tags.append("低吸")
+    if change_pct >= 1:
+        signal_tags.append("趋势")
+    if change_pct >= 3 or turnover_rate >= 5:
+        signal_tags.append("突破")
+    if not signal_tags and 45 <= score <= 65:
+        signal_tags.append("均值回归")
+
+    stock["market"] = market
+    stock["timing_score"] = score
+    stock["signal_tags"] = signal_tags
+    stock["sector_codes"] = stock.get("sector_codes") or []
+    return stock
+
+
 # ---------- 核心 API URL ----------
 
 EM_CLIST_URL = "https://82.push2.eastmoney.com/api/qt/clist/get"
@@ -402,6 +427,7 @@ def _mock_stock_list(page: int = 1, page_size: int = 50) -> dict:
             "pb": round(random.uniform(1, 10), 2),
             "total_mv": round(random.uniform(1e10, 1e13)),
         })
+        _with_stock_ui_fields(items[-1])
     total = len(items)
     start = (page - 1) * page_size
     return {"items": items[start:start + page_size], "total": total, "page": page, "page_size": page_size}
@@ -453,6 +479,7 @@ def get_stock_list(page: int = 1, page_size: int = 50, sort_by: str = "change_pc
         for item in items_raw:
             code = str(item.get("f12", ""))
             parsed = _parse_spot_item(item, _guess_market(code))
+            _with_stock_ui_fields(parsed)
             items.append(parsed)
 
         result = {"items": items, "total": total, "page": page, "page_size": page_size}

@@ -46,7 +46,7 @@ export default function App() {
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <MswProvider>
-        <BrowserRouter basename="/ai-trader">
+        <BrowserRouter>
           <Suspense fallback={<LoadingFallback />}>
             <AppRouter />
           </Suspense>

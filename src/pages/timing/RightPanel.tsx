@@ -35,12 +35,18 @@ export default function RightPanel() {
       if (data.length > 0) {
         const lastPrice = data[data.length - 1].price;
         setStockPrice(lastPrice);
-        setStockPct(+(Math.random() * 20 - 5).toFixed(2));
+        if (data.length >= 2) {
+          const firstPrice = data[0].price;
+          const changePct = ((lastPrice - firstPrice) / firstPrice) * 100;
+          setStockPct(+changePct.toFixed(2));
+        } else {
+          setStockPct(0);
+        }
       }
     });
 
     marketService.getVolfs(selectedStock.code).then(setVolfsData);
-  }, [selectedStock]);
+  }, [selectedStock?.code]);
 
   if (!selectedStock) {
     return (

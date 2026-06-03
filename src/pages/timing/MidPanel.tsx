@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMarketStore } from '../../stores/useMarketStore';
 import { useSignalStore } from '../../stores/useSignalStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import MainlineTab from './MainlineTab';
 import EtfTab from './EtfTab';
 import StockTab from './StockTab';
@@ -19,12 +20,16 @@ export default function MidPanel() {
   const [activeTab, setActiveTab] = useState<SubTab>('summary');
   const selectedDate = useMarketStore((s) => s.selectedDate);
   const fetchTimingSignals = useSignalStore((s) => s.fetchTimingSignals);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
+    // 未认证时跳过 API 调用，避免触发 401
+    if (!isAuthenticated) return;
     fetchTimingSignals(selectedDate, activeTab === 'mainline' ? '主线' : activeTab === 'etf' ? 'ETF' : activeTab === 'stock' ? '个股' : '汇总');
-  }, [selectedDate, activeTab, fetchTimingSignals]);
+  }, [selectedDate, activeTab, fetchTimingSignals, isAuthenticated]);
 
   const handleRefresh = () => {
+    if (!isAuthenticated) return;
     fetchTimingSignals(selectedDate, activeTab === 'mainline' ? '主线' : activeTab === 'etf' ? 'ETF' : activeTab === 'stock' ? '个股' : '汇总');
   };
 

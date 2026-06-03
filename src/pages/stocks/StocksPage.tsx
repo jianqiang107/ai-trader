@@ -39,7 +39,7 @@ export default function StocksPage() {
     );
   }, [stocks, search]);
 
-  const columns = [
+  const columns = useMemo(() => [
     {
       key: 'name',
       title: '股票名称',
@@ -99,9 +99,9 @@ export default function StocksPage() {
       title: '择时得分',
       width: 70,
       align: 'center' as const,
-      sorter: (a: Stock, b: Stock) => a.timing_score - b.timing_score,
+      sorter: (a: Stock, b: Stock) => (a.timing_score ?? 0) - (b.timing_score ?? 0),
       render: (_: unknown, row: Stock) => {
-        const score = row.timing_score;
+        const score = row.timing_score ?? 0;
         const color = score >= 80 ? 'rise' : score >= 50 ? 'text-orange' : 'fall';
         return (
           <div className="flex items-center justify-center gap-1">
@@ -125,13 +125,13 @@ export default function StocksPage() {
       align: 'left' as const,
       render: (_: unknown, row: Stock) => (
         <div className="flex items-center gap-1">
-          {row.signal_tags.map((tag) => (
+          {(row.signal_tags ?? []).map((tag) => (
             <SignalTag key={tag} tag={tag} />
           ))}
         </div>
       ),
     },
-  ];
+  ], []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

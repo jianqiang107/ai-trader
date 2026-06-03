@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import DataTable from '../../components/common/DataTable';
 import { useSignalStore } from '../../stores/useSignalStore';
 import { formatChangePct, formatPrice } from '../../utils/format';
@@ -34,7 +34,7 @@ export default function EtfTab() {
   const selectedStock = useSignalStore((s) => s.selectedStock);
   const [data] = useState(ETF_MOCK);
 
-  const columns = [
+  const columns = useMemo(() => [
     { key: 'index', title: '序号', width: 40, render: (_: unknown, __: unknown, i: number) => <span className="text-text-muted">{i + 1}</span> },
     { key: 'code', title: '代码', width: 70, render: (v: unknown) => <span className="text-blue">{v as string}</span> },
     { key: 'name', title: '名称', width: 80, render: (v: unknown) => <span className="text-text-primary">{v as string}</span> },
@@ -43,7 +43,7 @@ export default function EtfTab() {
     { key: 'vol', title: '成交量(手)', width: 70, render: (v: unknown) => <span className="text-text-secondary">{(v as number).toLocaleString()}</span> },
     { key: 'liangbi', title: '量比', width: 45, render: (v: unknown) => <span className={(v as number) > 1 ? 'rise' : 'fall'}>{(v as number).toFixed(2)}</span> },
     { key: 'flow', title: '资金流向', width: 65, render: (v: unknown) => <span className={(v as number) >= 0 ? 'rise' : 'fall'}>{(v as number) >= 0 ? '+' : ''}{(v as number).toFixed(2)}亿</span> },
-  ];
+  ], []);
 
   return (
     <div className="flex flex-col h-full">

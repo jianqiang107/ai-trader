@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import DataTable from '../../components/common/DataTable';
 import SignalTag from '../../components/common/SignalTag';
 import { useSignalStore } from '../../stores/useSignalStore';
@@ -35,7 +35,7 @@ export default function MainlineTab() {
 
   const selectedStock = useSignalStore((s) => s.selectedStock);
 
-  const columns = [
+  const columns = useMemo(() => [
     { key: 'index', title: '序号', width: 40, render: (_: unknown, __: unknown, i: number) => <span className="text-text-muted">{i + 1}</span> },
     { key: 'stock_code', title: '代码', width: 70, render: (v: unknown) => <span className="text-blue">{v as string}</span> },
     { key: 'stock_name', title: '名称', width: 70, render: (v: unknown) => <span className="text-text-primary">{v as string}</span> },
@@ -47,7 +47,7 @@ export default function MainlineTab() {
       if (val === null) return <span className="text-text-muted">-</span>;
       return <span className={val >= 0 ? 'rise' : 'fall'}>{formatChangePct(val)}</span>;
     }},
-  ];
+  ], []);
 
   return (
     <div className="flex flex-col h-full">
