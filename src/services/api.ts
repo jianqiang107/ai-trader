@@ -17,8 +17,8 @@ const api = axios.create({
   },
 });
 
-/** 防止重复跳转的标志位 */
-let isRedirecting = false;
+/** 防止重复弹登录的标志位 */
+let isNotifyingAuthRequired = false;
 
 /** 请求拦截器 - 注入token */
 api.interceptors.request.use((config) => {
@@ -45,15 +45,11 @@ api.interceptors.response.use(
 
       // 检查是否应跳过全局跳转（某些请求自行处理 401）
       const skipRedirect = error.config?.skipAuthRedirect === true;
-      // 检查当前路径是否已在首页或登录页，避免死循环
-      const currentPath = window.location.pathname;
-      const isAlreadyOnSafePage = currentPath === '/' || currentPath === '/login';
 
-      if (!skipRedirect && !isAlreadyOnSafePage && !isRedirecting) {
-        isRedirecting = true;
-        window.location.href = '/';
-        // 3 秒后重置标志位，允许后续合法跳转
-        setTimeout(() => { isRedirecting = false; }, 3000);
+      if (!skipRedirect && !isNotifyingAuthRequired) {
+        isNotifyingAuthRequired = true;
+        window.dispatchEvent(new CustomEvent('auth:required'));
+        setTimeout(() => { isNotifyingAuthRequired = false; }, 3000);
       }
     }
     return Promise.reject(error);

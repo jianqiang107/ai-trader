@@ -20,6 +20,7 @@ class User(Base, TimestampMixin):
         String(36), primary_key=True, default=generate_uuid
     )
     phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     nickname: Mapped[str | None] = mapped_column(String(50), nullable=True)
     avatar: Mapped[str | None] = mapped_column(String(500), nullable=True)
     plan: Mapped[str] = mapped_column(String(20), default="free", nullable=False)

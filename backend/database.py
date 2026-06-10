@@ -44,6 +44,7 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _ensure_user_password_column(conn)
 
     # 插入种子数据
     await _seed_admin_user()
@@ -56,16 +57,23 @@ async def _seed_admin_user() -> None:
     from models.user import User, UserAlertSettings
     from models.strategy import UserSubscription
     from config import settings
+    from services.user_service import hash_password
 
     async with async_session() as session:
         result = await session.execute(
             select(User).where(User.phone == settings.ADMIN_PHONE)
         )
-        if result.scalars().first() is not None:
+        existing = result.scalars().first()
+        if existing is not None:
+            if settings.ADMIN_PASSWORD:
+                existing.password_hash = hash_password(settings.ADMIN_PASSWORD)
+                await session.commit()
+                print(f"[DB] 已同步管理员账号密码: {settings.ADMIN_PHONE}")
             return  # 已存在，跳过
 
         admin = User(
             phone=settings.ADMIN_PHONE,
+            password_hash=hash_password(settings.ADMIN_PASSWORD) if settings.ADMIN_PASSWORD else None,
             nickname=settings.ADMIN_NICKNAME,
             plan=settings.ADMIN_PLAN,
             auto_renew=True,
@@ -84,6 +92,15 @@ async def _seed_admin_user() -> None:
 
         await session.commit()
         print(f"[DB] 已创建管理员账号: {settings.ADMIN_PHONE} ({settings.ADMIN_PLAN})")
+
+
+async def _ensure_user_password_column(conn) -> None:
+    """SQLite 轻量迁移：为已有 users 表补 password_hash 列。"""
+    result = await conn.exec_driver_sql("PRAGMA table_info(users)")
+    columns = {row[1] for row in result.fetchall()}
+    if "password_hash" not in columns:
+        await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)")
+        print("[DB] 已为 users 表补充 password_hash 列")
 
 
 async def _seed_strategies() -> None:

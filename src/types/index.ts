@@ -4,4 +4,4 @@ export type { Strategy, StrategyType, PlanLevel, StylePreset, FactorLabel, Facto
 export type { Sector, SectorType } from './sector';
 export type { KLineData, FenshiData, VolfsData, EmotionData, EmotionFlowData } from './kline';
 export type { News, Sentiment, NewsCategory } from './news';
-export type { User, LoginRequest, RegisterRequest, LoginResponse, Notification } from './user';
+export type { User, LoginRequest, RegisterRequest, SendCodeResponse, LoginResponse, Notification } from './user';

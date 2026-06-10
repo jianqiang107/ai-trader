@@ -42,11 +42,13 @@ function LoadingFallback() {
 }
 
 export default function App() {
+  const routerBasename = window.location.pathname.startsWith('/ai-trader') ? '/ai-trader' : undefined;
+
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <MswProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={routerBasename}>
           <Suspense fallback={<LoadingFallback />}>
             <AppRouter />
           </Suspense>

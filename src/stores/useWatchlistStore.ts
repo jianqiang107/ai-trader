@@ -30,6 +30,7 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
       await get().fetchWatchlist();
     } catch (e) {
       console.error('Failed to add to watchlist:', e);
+      throw e;
     }
   },
 
@@ -41,6 +42,7 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
       }));
     } catch (e) {
       console.error('Failed to remove from watchlist:', e);
+      throw e;
     }
   },
 

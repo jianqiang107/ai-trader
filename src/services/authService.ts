@@ -1,5 +1,5 @@
 import api from './api';
-import type { LoginRequest, LoginResponse, RegisterRequest } from '../types';
+import type { LoginRequest, LoginResponse, RegisterRequest, SendCodeResponse } from '../types';
 
 export const authService = {
   /** 登录 */
@@ -15,9 +15,9 @@ export const authService = {
     localStorage.removeItem('token');
   },
 
-  /** 获取验证码(MOCK模式直接返回成功) */
-  sendVerifyCode: (_phone: string): Promise<void> =>
-    api.post('/user/send-code'),
+  /** 获取验证码 */
+  sendVerifyCode: (phone: string): Promise<SendCodeResponse | null> =>
+    api.post('/user/send-code', { phone }),
 
   /** 刷新token */
   refreshToken: (): Promise<LoginResponse> =>

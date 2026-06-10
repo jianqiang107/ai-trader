@@ -24,6 +24,7 @@ export default function WatchlistPage() {
   const [search, setSearch] = useState('');
   const [addCode, setAddCode] = useState('');
   const [showAddInput, setShowAddInput] = useState(false);
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     fetchWatchlist();
@@ -42,13 +43,23 @@ export default function WatchlistPage() {
 
   const handleAdd = async () => {
     if (!addCode.trim()) return;
-    await addToWatchlist(addCode.trim());
-    setAddCode('');
-    setShowAddInput(false);
+    try {
+      await addToWatchlist(addCode.trim());
+      setMessage(`${addCode.trim()} 已加入自选。`);
+      setAddCode('');
+      setShowAddInput(false);
+    } catch {
+      setMessage('添加自选失败，请先确认已登录或稍后重试。');
+    }
   };
 
   const handleRemove = async (code: string) => {
-    await removeFromWatchlist(code);
+    try {
+      await removeFromWatchlist(code);
+      setMessage(`${code} 已从自选移除。`);
+    } catch {
+      setMessage('删除自选失败，请稍后重试。');
+    }
   };
 
   /** 计算浮动盈亏（基于涨跌幅的模拟值） */
@@ -176,6 +187,9 @@ export default function WatchlistPage() {
         />
 
         <span className="flex-1" />
+        {message && (
+          <span className="text-orange text-[11px] max-w-[240px] truncate">{message}</span>
+        )}
 
         {/* 添加自选 */}
         {showAddInput ? (

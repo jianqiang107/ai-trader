@@ -18,14 +18,19 @@ export interface User {
 /** 登录请求 */
 export interface LoginRequest {
   phone: string;
-  code: string;
+  password: string;
 }
 
 /** 注册请求 */
 export interface RegisterRequest {
   phone: string;
-  code: string;
+  password: string;
   nickname: string;
+}
+
+/** 验证码发送响应 */
+export interface SendCodeResponse {
+  mock_code?: string;
 }
 
 /** 登录响应 */

@@ -7,6 +7,7 @@ interface MarketState {
   indices: IndexData[];
   selectedDate: string;
   marketRegime: 'bull' | 'bear' | 'neutral';
+  indicesUpdatedAt: string;
   fetchIndices: () => Promise<void>;
   setSelectedDate: (date: string) => void;
   startIndexPolling: () => void;
@@ -20,13 +21,14 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   indices: [],
   selectedDate: new Date().toISOString().slice(0, 10),
   marketRegime: 'neutral',
+  indicesUpdatedAt: '',
 
   fetchIndices: async () => {
     if (indicesFetching) return;
     indicesFetching = true;
     try {
       const data = await marketService.getIndices();
-      set({ indices: data });
+      set({ indices: data, indicesUpdatedAt: new Date().toISOString() });
       const avgChange = data.reduce((sum, idx) => sum + idx.change_pct, 0) / data.length;
       set({
         marketRegime: avgChange > 0.5 ? 'bull' : avgChange < -0.5 ? 'bear' : 'neutral',

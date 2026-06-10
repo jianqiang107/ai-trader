@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import DataTable from '../../components/common/DataTable';
 import SignalTag from '../../components/common/SignalTag';
 import EmptyState from '../../components/common/EmptyState';
+import StockDetailDialog from '../../components/common/StockDetailDialog';
 import type { Stock, SignalTagType } from '../../types';
 import { formatPrice, formatChangePct, formatVolume } from '../../utils/format';
 import { STRATEGY_TYPES } from '../../utils/constants';
@@ -12,10 +13,14 @@ export default function StocksPage() {
   const [activeMode, setActiveMode] = useState<SignalTagType | 'all'>('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
 
   useEffect(() => {
     const fetchStocks = async () => {
       setLoading(true);
+      setError('');
       try {
         const params: Record<string, string> = {};
         if (activeMode !== 'all') params.mode = activeMode;
@@ -24,20 +29,25 @@ export default function StocksPage() {
         setStocks(StockData.items || []);
       } catch (e) {
         console.error('Failed to fetch stocks:', e);
+        setError('股票列表加载失败，请检查数据源后重试。');
       } finally {
         setLoading(false);
       }
     };
     fetchStocks();
-  }, [activeMode]);
+  }, [activeMode, refreshKey]);
 
   const filteredStocks = useMemo(() => {
-    if (!search) return stocks;
+    let result = stocks;
+    if (activeMode !== 'all') {
+      result = result.filter((s) => (s.signal_tags ?? []).includes(activeMode));
+    }
+    if (!search) return result;
     const q = search.toLowerCase();
-    return stocks.filter(
+    return result.filter(
       (s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)
     );
-  }, [stocks, search]);
+  }, [stocks, search, activeMode]);
 
   const columns = useMemo(() => [
     {
@@ -185,19 +195,38 @@ export default function StocksPage() {
           <div className="flex items-center justify-center h-full text-text-muted text-sm">
             加载中...
           </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-sm">
+            <div className="text-rise">{error}</div>
+            <button
+              className="px-3 py-1 rounded text-xs bg-orange/15 border border-orange/30 text-orange hover:bg-orange hover:text-black transition-colors"
+              onClick={() => setRefreshKey((key) => key + 1)}
+            >
+              重新加载
+            </button>
+          </div>
         ) : filteredStocks.length > 0 ? (
           <DataTable
             columns={columns}
             data={filteredStocks}
             rowKey="code"
-            onRowClick={(row) => {
-              /* 可扩展：点击股票打开详情 */
-            }}
+            selectedRowKey={selectedStock?.code ?? null}
+            onRowClick={setSelectedStock}
           />
         ) : (
           <EmptyState message="暂无股票数据" description="未找到匹配的股票" />
         )}
       </div>
+
+      {selectedStock && (
+        <StockDetailDialog
+          open={!!selectedStock}
+          stockCode={selectedStock.code}
+          stockName={selectedStock.name}
+          signalTags={selectedStock.signal_tags ?? []}
+          onClose={() => setSelectedStock(null)}
+        />
+      )}
     </div>
   );
 }

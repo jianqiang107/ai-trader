@@ -28,6 +28,13 @@ export interface Signal {
   holding_days?: number;
   current_price?: number;
   floating_pnl?: number;
+  reasons?: string[];
+  score_breakdown?: Record<string, number>;
+  data_source?: string;
+  secondary_modes?: SignalTagType[];
+  market_rank?: number;
+  quote_updated_at?: string;
+  sector_name?: string;
 }
 
 /** 实盘信号筛选 */

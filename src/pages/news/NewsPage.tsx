@@ -4,10 +4,10 @@ import { useECharts, setChartOption } from '../../hooks/useECharts';
 import StockDetailDialog from '../../components/common/StockDetailDialog';
 import type { News, NewsCategory, Sentiment } from '../../types';
 import { formatDateTime } from '../../utils/format';
-import axios from 'axios';
+import { newsService } from '../../services/newsService';
 
 const CATEGORY_TABS: { value: NewsCategory | 'all'; label: string }[] = [
-  { value: 'all', label: 'AI精选' },
+  { value: 'ai_picked', label: 'AI精选' },
   { value: 'market', label: '市场快讯' },
   { value: 'stock', label: '个股资讯' },
   { value: 'policy', label: '政策解读' },
@@ -77,7 +77,9 @@ const SECTOR_NAMES: Record<string, string> = {
 export default function NewsPage() {
   const [newsList, setNewsList] = useState<News[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState<NewsCategory | 'all'>('all');
+  const [error, setError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [activeCategory, setActiveCategory] = useState<NewsCategory | 'all'>('ai_picked');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [stockDialogCode, setStockDialogCode] = useState<string | null>(null);
   const [stockDialogName, setStockDialogName] = useState('');
@@ -88,21 +90,19 @@ export default function NewsPage() {
   useEffect(() => {
     const fetchNews = async () => {
       setLoading(true);
+      setError('');
       try {
-        const params: Record<string, string> = {};
-        if (activeCategory !== 'all') {
-          params.category = activeCategory;
-        }
-        const res = await axios.get('/api/news', { params });
-        setNewsList(res.data?.data ?? []);
+        const data = await newsService.getNews(activeCategory === 'all' ? undefined : activeCategory);
+        setNewsList(data);
       } catch {
         setNewsList([]);
+        setError('资讯加载失败，请稍后重试。');
       } finally {
         setLoading(false);
       }
     };
     fetchNews();
-  }, [activeCategory]);
+  }, [activeCategory, refreshKey]);
 
   /** 市场情绪仪表盘 */
   useEffect(() => {
@@ -227,9 +227,19 @@ export default function NewsPage() {
             <div className="flex items-center justify-center h-full text-text-muted text-sm">
               加载中...
             </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-sm">
+              <div className="text-rise">{error}</div>
+              <button
+                className="px-3 py-1 rounded text-xs bg-orange/15 border border-orange/30 text-orange hover:bg-orange hover:text-black transition-colors"
+                onClick={() => setRefreshKey((key) => key + 1)}
+              >
+                重新加载
+              </button>
+            </div>
           ) : newsList.length === 0 ? (
             <div className="flex items-center justify-center h-full text-text-muted text-sm">
-              暂无资讯
+              暂无资讯，稍后再来查看市场更新
             </div>
           ) : (
             <Virtuoso

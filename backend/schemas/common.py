@@ -12,6 +12,7 @@ class ApiResponse(BaseModel, Generic[T]):
     code: int = 0
     data: T | None = None
     message: str = "ok"
+    source: str | None = None
 
 
 class AppException(Exception):

@@ -7,15 +7,37 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
 import time
 import traceback
-from datetime import timedelta, date
+from datetime import date, datetime, timedelta
 from services.cache_service import cache
+
+logger = logging.getLogger(__name__)
 
 # ---------- 东方财富 API Session ----------
 
 _EM_SESSION = None
+_LAST_SOURCE: dict[str, str] = {}
+_CACHE_SOURCE: dict[str, str] = {}
+
+
+def _set_last_source(key: str, source: str) -> None:
+    _LAST_SOURCE[key] = source
+
+
+def get_last_source(key: str) -> str:
+    return _LAST_SOURCE.get(key, "unknown")
+
+
+def _remember_cache_source(cache_key: str, source: str) -> None:
+    _CACHE_SOURCE[cache_key] = source
+
+
+def _restore_cache_source(source_key: str, cache_key: str) -> None:
+    source = _CACHE_SOURCE.get(cache_key, "cache")
+    _set_last_source(source_key, f"cache:{source}" if source != "cache" else "cache")
 
 def _em_session():
     """返回全局复用的 requests.Session，配置东方财富所需的 Headers"""
@@ -111,6 +133,7 @@ def _guess_market(code: str) -> str:
 def _with_stock_ui_fields(stock: dict) -> dict:
     """补齐前端股票列表展示需要的派生字段。"""
     code = str(stock.get("code") or "")
+    symbol = code.split(".")[0] if "." in code else code
     market = code.split(".")[-1] if "." in code else _guess_market(code)
     change_pct = float(stock.get("change_pct") or 0)
     turnover_rate = float(stock.get("turnover_rate") or 0)
@@ -129,6 +152,7 @@ def _with_stock_ui_fields(stock: dict) -> dict:
     stock["market"] = market
     stock["timing_score"] = score
     stock["signal_tags"] = signal_tags
+    stock["sector_names"] = STOCK_SECTOR_MAP.get(symbol, [])
     stock["sector_codes"] = stock.get("sector_codes") or []
     return stock
 
@@ -139,6 +163,157 @@ EM_CLIST_URL = "https://82.push2.eastmoney.com/api/qt/clist/get"
 EM_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 EM_TRENDS_URL = "https://push2.eastmoney.com/api/qt/stock/trends2/get"
 EM_STOCK_URL = "https://push2.eastmoney.com/api/qt/stock/get"
+TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q="
+
+STOCK_SECTOR_MAP: dict[str, list[str]] = {
+    "600246": ["存储芯片", "房地产服务"],
+    "600482": ["船舶", "军工"],
+    "603268": ["船舶", "外贸"],
+    "000725": ["存储芯片", "面板"],
+    "000063": ["通信设备", "算力"],
+    "002230": ["AI应用", "算力"],
+    "600745": ["半导体", "算力"],
+    "300274": ["储能", "光伏"],
+    "300750": ["储能", "新能源车"],
+    "600438": ["光伏", "储能"],
+    "002594": ["新能源车", "储能"],
+    "601899": ["有色金属", "黄金"],
+    "600570": ["金融科技", "软件"],
+    "002475": ["消费电子", "AI终端"],
+}
+
+
+STOCK_UNIVERSE: list[tuple[str, str]] = [
+    ("600246", "SH"), ("600482", "SH"), ("603268", "SH"),
+    ("600519", "SH"), ("000858", "SZ"), ("300750", "SZ"), ("601318", "SH"),
+    ("600036", "SH"), ("000001", "SZ"), ("600276", "SH"), ("300059", "SZ"),
+    ("601166", "SH"), ("600900", "SH"), ("000333", "SZ"), ("601888", "SH"),
+    ("300015", "SZ"), ("002415", "SZ"), ("600309", "SH"), ("000002", "SZ"),
+    ("600030", "SH"), ("002714", "SZ"), ("300124", "SZ"), ("601012", "SH"),
+    ("600809", "SH"), ("002475", "SZ"), ("300274", "SZ"), ("600585", "SH"),
+    ("000651", "SZ"), ("603259", "SH"), ("002304", "SZ"), ("300760", "SZ"),
+    ("600887", "SH"), ("000725", "SZ"), ("601899", "SH"), ("002594", "SZ"),
+    ("300498", "SZ"), ("600050", "SH"), ("000063", "SZ"), ("601088", "SH"),
+    ("002142", "SZ"), ("600048", "SH"), ("300122", "SZ"), ("601398", "SH"),
+    ("000568", "SZ"), ("600570", "SH"), ("002230", "SZ"), ("600438", "SH"),
+    ("300033", "SZ"), ("601668", "SH"), ("000596", "SZ"), ("600745", "SH"),
+    ("002027", "SZ"), ("300413", "SZ"),
+]
+
+
+def _annotate_sector_strength(items: list[dict]) -> list[dict]:
+    """根据当前股票池聚合板块热度，补充板块强度字段。"""
+    sector_stats: dict[str, dict[str, float]] = {}
+    for item in items:
+        change_pct = float(item.get("change_pct") or 0)
+        for sector in item.get("sector_names") or []:
+            stats = sector_stats.setdefault(
+                sector,
+                {"count": 0, "change_sum": 0.0, "strong_count": 0, "limit_up_count": 0},
+            )
+            stats["count"] += 1
+            stats["change_sum"] += change_pct
+            if change_pct >= 5:
+                stats["strong_count"] += 1
+            if change_pct >= 9.7:
+                stats["limit_up_count"] += 1
+
+    sector_scores: dict[str, float] = {}
+    for sector, stats in sector_stats.items():
+        count = max(stats["count"], 1)
+        avg_change = stats["change_sum"] / count
+        score = 50 + avg_change * 8 + stats["strong_count"] * 6 + stats["limit_up_count"] * 12
+        sector_scores[sector] = max(0, min(100, round(score, 2)))
+
+    for item in items:
+        sectors = item.get("sector_names") or []
+        best_sector = max(sectors, key=lambda s: sector_scores.get(s, 0), default="")
+        item["sector_name"] = best_sector
+        item["sector_heat"] = sector_scores.get(best_sector, 0)
+        item["sector_strength_label"] = "板块强度"
+    return items
+
+
+def _to_tencent_symbol(code: str) -> str:
+    symbol = code.split(".")[0] if "." in code else code
+    market = code.split(".")[1].upper() if "." in code else _guess_market(symbol)
+    prefix = "sh" if market == "SH" else "sz"
+    return f"{prefix}{symbol}"
+
+
+def _parse_float(value: str, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_tencent_quote(record: str) -> dict | None:
+    """解析腾讯行情 v_sh600519=\"...\" 格式。"""
+    if "=\"" not in record:
+        return None
+    symbol_part, payload = record.split("=\"", 1)
+    payload = payload.strip().rstrip("\";")
+    parts = payload.split("~")
+    if len(parts) < 45:
+        return None
+
+    raw_symbol = symbol_part.replace("v_", "")
+    symbol = parts[2] or raw_symbol[-6:]
+    market = "SH" if raw_symbol.startswith("sh") else "SZ"
+    price = _parse_float(parts[3])
+    pre_close = _parse_float(parts[4])
+    change_amount = _parse_float(parts[31]) if len(parts) > 31 else round(price - pre_close, 2)
+    change_pct = _parse_float(parts[32]) if len(parts) > 32 else 0.0
+    amount_wan = _parse_float(parts[37]) if len(parts) > 37 else 0.0
+    total_mv_yi = _parse_float(parts[44]) if len(parts) > 44 else 0.0
+    circ_mv_yi = _parse_float(parts[45]) if len(parts) > 45 else 0.0
+
+    quote = {
+        "code": f"{symbol}.{market}",
+        "name": parts[1],
+        "price": price,
+        "open": _parse_float(parts[5]),
+        "high": _parse_float(parts[33]) if len(parts) > 33 else 0.0,
+        "low": _parse_float(parts[34]) if len(parts) > 34 else 0.0,
+        "pre_close": pre_close,
+        "change_amount": change_amount,
+        "change_pct": change_pct,
+        "volume": _parse_float(parts[36]) if len(parts) > 36 else _parse_float(parts[6]),
+        "amount": round(amount_wan * 10000, 2),
+        "turnover_rate": _parse_float(parts[38]) if len(parts) > 38 else 0.0,
+        "pe": _parse_float(parts[39]) if len(parts) > 39 else 0.0,
+        "pb": _parse_float(parts[46]) if len(parts) > 46 else 0.0,
+        "amplitude": _parse_float(parts[43]) if len(parts) > 43 else 0.0,
+        "total_mv": round(total_mv_yi * 100000000, 2),
+        "circ_mv": round(circ_mv_yi * 100000000, 2),
+    }
+    _with_stock_ui_fields(quote)
+    return quote
+
+
+def _get_tencent_quotes(codes: list[str]) -> list[dict]:
+    symbols = ",".join(_to_tencent_symbol(code) for code in codes)
+    if not symbols:
+        return []
+    req_url = TENCENT_QUOTE_URL + symbols
+    import requests
+    response = requests.get(
+        req_url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://gu.qq.com/",
+        },
+        timeout=8,
+    )
+    response.raise_for_status()
+    text = response.content.decode("gbk", errors="ignore")
+    result = []
+    for record in text.strip().splitlines():
+        quote = _parse_tencent_quote(record)
+        if quote and quote.get("price"):
+            result.append(quote)
+    return result
 
 
 # ---------- 指数数据 ----------
@@ -192,6 +367,7 @@ def get_indices() -> list[dict]:
     """获取实时大盘指数"""
     cached = cache.get("indices")
     if cached:
+        _set_last_source("indices", "cache")
         return cached
 
     try:
@@ -215,14 +391,17 @@ def get_indices() -> list[dict]:
 
         if result:
             cache.set("indices", result, ttl=60)
+            _set_last_source("indices", "real")
             return result
 
         print("[EM] get_indices: no matching indices found, using fallback")
+        _set_last_source("indices", "fallback")
         return _mock_indices()
 
     except Exception as e:
         print(f"[EM] get_indices failed: {e}")
         traceback.print_exc()
+        _set_last_source("indices", "fallback")
         return _mock_indices()
 
 
@@ -271,6 +450,7 @@ def get_kline(code: str, period: str = "daily") -> list[dict]:
     cache_key = f"kline:{code}:{period}"
     cached = cache.get(cache_key)
     if cached:
+        _set_last_source("kline", "cache")
         return cached
 
     try:
@@ -321,10 +501,12 @@ def get_kline(code: str, period: str = "daily") -> list[dict]:
             r["ma30"] = round(sum(closes[i - 29: i + 1]) / 30, 2) if i >= 29 else None
 
         cache.set(cache_key, result, ttl=300)
+        _set_last_source("kline", "real")
         return result
     except Exception as e:
         print(f"[EM] get_kline({code}, {period}) failed: {e}")
         traceback.print_exc()
+        _set_last_source("kline", "fallback")
         return _mock_kline(code)
 
 
@@ -354,6 +536,7 @@ def get_fenshi(code: str) -> list[dict]:
     cache_key = f"fenshi:{code}"
     cached = cache.get(cache_key)
     if cached:
+        _set_last_source("fenshi", "cache")
         return cached
 
     try:
@@ -382,9 +565,11 @@ def get_fenshi(code: str) -> list[dict]:
                 })
 
         cache.set(cache_key, result, ttl=60)
+        _set_last_source("fenshi", "real")
         return result
     except Exception as e:
         print(f"[EM] get_fenshi({code}) failed: {e}")
+        _set_last_source("fenshi", "fallback")
         return _mock_fenshi(code)
 
 
@@ -436,7 +621,58 @@ def _mock_stock_list(page: int = 1, page_size: int = 50) -> dict:
 ALL_STOCK_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23"
 
 # clist/get 需要的完整字段列表（get_stock_list 使用）
-SPOT_FIELDS = "f2,f3,f4,f5,f6,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f115"
+SPOT_FIELDS = "f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f23,f115"
+
+
+def get_full_market_stock_list(force_refresh: bool = False) -> dict:
+    """获取推荐引擎使用的全市场实时行情，不使用固定池或模拟数据回退。"""
+    cache_key = "recommendation:full-market"
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
+    params = {
+        "pn": "1",
+        "pz": "6000",
+        "po": "1",
+        "np": "1",
+        "ut": "bd1d9ddb04089700cf9c27f6f7426281",
+        "fltt": "2",
+        "invt": "2",
+        "fid": "f6",
+        "fs": ALL_STOCK_FS,
+        "fields": SPOT_FIELDS,
+    }
+
+    try:
+        data = _em_get(EM_CLIST_URL, params, timeout=15, retries=1)
+        raw_items = data.get("data", {}).get("diff", [])
+        items = []
+        for raw in raw_items:
+            code = str(raw.get("f12", ""))
+            if not code:
+                continue
+            parsed = _parse_spot_item(raw, _guess_market(code))
+            _with_stock_ui_fields(parsed)
+            items.append(parsed)
+        _annotate_sector_strength(items)
+        result = {
+            "items": items,
+            "total": len(items),
+            "source": "eastmoney",
+            "quote_updated_at": datetime.now().isoformat(),
+        }
+        cache.set(cache_key, result, ttl=45)
+        return result
+    except Exception as exc:
+        logger.warning("full-market quote load failed: %s", exc)
+        return {
+            "items": [],
+            "total": 0,
+            "source": "unavailable",
+            "quote_updated_at": datetime.now().isoformat(),
+        }
 
 
 def get_stock_list(page: int = 1, page_size: int = 50, sort_by: str = "change_pct",
@@ -445,7 +681,25 @@ def get_stock_list(page: int = 1, page_size: int = 50, sort_by: str = "change_pc
     cache_key = f"stocks:p{page}:s{page_size}:{sort_by}:{sort_order}"
     cached = cache.get(cache_key)
     if cached:
+        _restore_cache_source("stocks", cache_key)
         return cached
+
+    try:
+        universe_codes = [f"{code}.{market}" for code, market in STOCK_UNIVERSE]
+        items = _get_tencent_quotes(universe_codes)
+        if items:
+            _annotate_sector_strength(items)
+            reverse = sort_order != "asc"
+            items.sort(key=lambda x: float(x.get(sort_by) or 0), reverse=reverse)
+            total = len(items)
+            start = (page - 1) * page_size
+            result = {"items": items[start:start + page_size], "total": total, "page": page, "page_size": page_size}
+            cache.set(cache_key, result, ttl=30)
+            _remember_cache_source(cache_key, "tencent")
+            _set_last_source("stocks", "tencent")
+            return result
+    except Exception as e:
+        print(f"[Tencent] get_stock_list failed: {e}")
 
     try:
         # 排序字段映射到东方财富的 fid
@@ -481,13 +735,17 @@ def get_stock_list(page: int = 1, page_size: int = 50, sort_by: str = "change_pc
             parsed = _parse_spot_item(item, _guess_market(code))
             _with_stock_ui_fields(parsed)
             items.append(parsed)
+        _annotate_sector_strength(items)
 
         result = {"items": items, "total": total, "page": page, "page_size": page_size}
         cache.set(cache_key, result, ttl=60)
+        _remember_cache_source(cache_key, "real")
+        _set_last_source("stocks", "real")
         return result
     except Exception as e:
         print(f"[EM] get_stock_list failed: {e}")
         traceback.print_exc()
+        _set_last_source("stocks", "fallback")
         return _mock_stock_list(page, page_size)
 
 
@@ -523,7 +781,19 @@ def get_stock_quote(code: str) -> dict:
     cache_key = f"quote:{code}"
     cached = cache.get(cache_key)
     if cached:
+        _restore_cache_source("quote", cache_key)
         return cached
+
+    try:
+        quotes = _get_tencent_quotes([code])
+        if quotes:
+            result = quotes[0]
+            cache.set(cache_key, result, ttl=15)
+            _remember_cache_source(cache_key, "tencent")
+            _set_last_source("quote", "tencent")
+            return result
+    except Exception as e:
+        print(f"[Tencent] get_stock_quote({code}) failed: {e}")
 
     try:
         secid = _to_market_code(code)
@@ -549,10 +819,13 @@ def get_stock_quote(code: str) -> dict:
 
         result["code"] = f"{symbol}.{_guess_market(symbol)}"
         cache.set(cache_key, result, ttl=30)
+        _remember_cache_source(cache_key, "real")
+        _set_last_source("quote", "real")
         return result
     except Exception as e:
         print(f"[EM] get_stock_quote({code}) failed: {e}")
         traceback.print_exc()
+        _set_last_source("quote", "fallback")
         # fallback mock
         price = round(random.uniform(10, 200), 2)
         change_pct = round(random.uniform(-5, 5), 2)
@@ -584,6 +857,7 @@ def get_sectors(sector_type: str = "concept") -> list[dict]:
     cache_key = f"sectors:{sector_type}"
     cached = cache.get(cache_key)
     if cached:
+        _set_last_source("sectors", "cache")
         return cached
 
     try:
@@ -617,9 +891,11 @@ def get_sectors(sector_type: str = "concept") -> list[dict]:
 
         result.sort(key=lambda x: x["change_pct"], reverse=True)
         cache.set(cache_key, result, ttl=120)
+        _set_last_source("sectors", "real")
         return result
     except Exception as e:
         print(f"[EM] get_sectors({sector_type}) failed: {e}")
+        _set_last_source("sectors", "fallback")
         return _mock_sectors()
 
 
@@ -659,6 +935,7 @@ def get_fund_flow(code: str) -> dict:
     cache_key = f"fundflow:{code}"
     cached = cache.get(cache_key)
     if cached:
+        _set_last_source("fundflow", "cache")
         return cached
 
     try:
@@ -688,10 +965,13 @@ def get_fund_flow(code: str) -> dict:
                 "small_net_inflow": float(latest[6]),
             }
             cache.set(cache_key, result, ttl=120)
+            _set_last_source("fundflow", "real")
             return result
+        _set_last_source("fundflow", "unavailable")
         return {}
     except Exception as e:
         print(f"[EM] get_fund_flow({code}) failed: {e}")
+        _set_last_source("fundflow", "unavailable")
         return {}
 
 
@@ -702,6 +982,7 @@ def get_north_flow() -> dict:
     cache_key = "northflow"
     cached = cache.get(cache_key)
     if cached:
+        _set_last_source("northflow", "cache")
         return cached
 
     try:
@@ -727,8 +1008,11 @@ def get_north_flow() -> dict:
                 "trend": [],
             }
             cache.set(cache_key, result, ttl=300)
+            _set_last_source("northflow", "real")
             return result
+        _set_last_source("northflow", "unavailable")
         return {}
     except Exception as e:
         print(f"[EM] get_north_flow failed: {e}")
+        _set_last_source("northflow", "unavailable")
         return {}

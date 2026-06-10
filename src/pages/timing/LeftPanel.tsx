@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMarketStore } from '../../stores/useMarketStore';
 import { useSignalStore } from '../../stores/useSignalStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import KlineChart from '../../components/charts/KlineChart';
 import EmotionChart from '../../components/charts/EmotionChart';
 
@@ -10,12 +11,15 @@ export default function LeftPanel() {
   const emotion1Data = useSignalStore((s) => s.emotion1Data);
   const emotion2Data = useSignalStore((s) => s.emotion2Data);
   const fetchEmotionData = useSignalStore((s) => s.fetchEmotionData);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   const [localDate, setLocalDate] = useState(selectedDate);
 
   useEffect(() => {
+    // 未认证时跳过 API 调用，避免触发 401 导致页面重定向抖动
+    if (!isAuthenticated) return;
     fetchEmotionData(localDate);
-  }, [localDate, fetchEmotionData]);
+  }, [localDate, fetchEmotionData, isAuthenticated]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const date = e.target.value;

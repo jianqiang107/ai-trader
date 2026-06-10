@@ -17,6 +17,7 @@ import random
 import traceback
 from fastapi import APIRouter, Query
 from services import akshare_service as svc
+from schemas.common import ApiResponse
 
 router = APIRouter()
 
@@ -27,7 +28,7 @@ router = APIRouter()
 def get_indices():
     """获取实时大盘指数（上证/深证/创业板/科创50/沪深300）"""
     data = svc.get_indices()
-    return {"code": 0, "data": data, "message": "ok"}
+    return ApiResponse(data=data, source=svc.get_last_source("indices"))
 
 
 # ---------- AKShare 诊断（调试端点）----------
@@ -72,7 +73,7 @@ def get_kline(
     if period not in ("daily", "weekly", "monthly"):
         period = "daily"
     data = svc.get_kline(code, period)
-    return {"code": 0, "data": data, "message": "ok"}
+    return ApiResponse(data=data, source=svc.get_last_source("kline"))
 
 
 # ---------- 分时数据 ----------
@@ -83,7 +84,7 @@ def get_fenshi(
 ):
     """获取当日分时数据"""
     data = svc.get_fenshi(code)
-    return {"code": 0, "data": data, "message": "ok"}
+    return ApiResponse(data=data, source=svc.get_last_source("fenshi"))
 
 
 # ---------- 量能数据 ----------
@@ -101,7 +102,7 @@ def get_volfs(
             "vol_value": vol,
             "vol_signal": "bullish" if vol > 5000 else "neutral" if vol > 2000 else "bearish",
         })
-    return {"code": 0, "data": data, "message": "ok"}
+    return ApiResponse(data=data, source="mock")
 
 
 # ---------- 个股实时报价 ----------
@@ -113,8 +114,8 @@ def get_stock_quote(
     """获取个股实时报价"""
     data = svc.get_stock_quote(code)
     if not data:
-        return {"code": 404, "data": None, "message": f"未找到 {code} 的数据"}
-    return {"code": 0, "data": data, "message": "ok"}
+        return ApiResponse(code=404, data=None, message=f"未找到 {code} 的数据", source=svc.get_last_source("quote"))
+    return ApiResponse(data=data, source=svc.get_last_source("quote"))
 
 
 # ---------- 个股列表 ----------
@@ -128,7 +129,7 @@ def get_stock_list(
 ):
     """获取个股列表（分页+排序）"""
     data = svc.get_stock_list(page, pageSize, sortBy, sortOrder)
-    return {"code": 0, "data": data, "message": "ok"}
+    return ApiResponse(data=data, source=svc.get_last_source("stocks"))
 
 
 # ---------- 板块列表 ----------
@@ -139,7 +140,7 @@ def get_sectors(
 ):
     """获取板块列表"""
     data = svc.get_sectors(type)
-    return {"code": 0, "data": data, "message": "ok"}
+    return ApiResponse(data=data, source=svc.get_last_source("sectors"))
 
 
 # ---------- 资金流向 ----------
@@ -151,8 +152,8 @@ def get_fund_flow(
     """获取个股资金流向"""
     data = svc.get_fund_flow(code)
     if not data:
-        return {"code": 404, "data": None, "message": f"未找到 {code} 的资金流向数据"}
-    return {"code": 0, "data": data, "message": "ok"}
+        return ApiResponse(code=404, data=None, message=f"未找到 {code} 的资金流向数据", source=svc.get_last_source("fundflow"))
+    return ApiResponse(data=data, source=svc.get_last_source("fundflow"))
 
 
 # ---------- 北向资金 ----------
@@ -162,5 +163,5 @@ def get_north_flow():
     """获取北向资金净流入"""
     data = svc.get_north_flow()
     if not data:
-        return {"code": 404, "data": None, "message": "暂无北向资金数据"}
-    return {"code": 0, "data": data, "message": "ok"}
+        return ApiResponse(code=404, data=None, message="暂无北向资金数据", source=svc.get_last_source("northflow"))
+    return ApiResponse(data=data, source=svc.get_last_source("northflow"))

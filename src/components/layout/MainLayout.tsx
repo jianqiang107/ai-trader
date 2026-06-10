@@ -1,16 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import TopNav from './TopNav';
 import IndexBar from './IndexBar';
 import BottomNews from './BottomNews';
 import NotificationCenter from '../common/NotificationCenter';
+import LoginDialog from '../common/LoginDialog';
 import ProfileDrawer from '../../pages/profile/ProfileDrawer';
 import AlertPreferenceDialog from '../../pages/profile/AlertPreferenceDialog';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 export default function MainLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [alertPrefOpen, setAlertPrefOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const logout = useAuthStore((s) => s.logout);
+
+  useEffect(() => {
+    const handleAuthRequired = () => {
+      logout();
+      setLoginOpen(true);
+    };
+    window.addEventListener('auth:required', handleAuthRequired);
+    return () => window.removeEventListener('auth:required', handleAuthRequired);
+  }, [logout]);
 
   return (
     <div className="flex flex-col h-screen bg-bg-primary text-text-primary overflow-hidden">
@@ -39,6 +52,10 @@ export default function MainLayout() {
       <AlertPreferenceDialog
         open={alertPrefOpen}
         onClose={() => setAlertPrefOpen(false)}
+      />
+      <LoginDialog
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
       />
     </div>
   );

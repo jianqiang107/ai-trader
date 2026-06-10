@@ -22,15 +22,18 @@ router = APIRouter(prefix="/user", tags=["用户"])
 @router.post("/send-code")
 async def send_code(req: SendCodeRequest):
     """发送验证码"""
-    user_service.send_verify_code(req.phone)
-    return ApiResponse(data=None, message="验证码已发送")
+    try:
+        code = user_service.send_verify_code(req.phone)
+    except ValueError as e:
+        return ApiResponse(code=400, data=None, message=str(e))
+    return ApiResponse(data={"mock_code": code} if code else None, message="验证码已发送")
 
 
 @router.post("/register")
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """注册"""
     try:
-        user = await user_service.register(req.phone, req.code, req.nickname, db)
+        user = await user_service.register(req.phone, req.password, req.nickname, db)
     except ValueError as e:
         return ApiResponse(code=400, data=None, message=str(e))
     return ApiResponse(
@@ -43,7 +46,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     """登录"""
     try:
-        result = await user_service.login(req.phone, req.code, db)
+        result = await user_service.login(req.phone, req.password, db)
     except ValueError as e:
         return ApiResponse(code=400, data=None, message=str(e))
     return ApiResponse(data=result, message="登录成功")

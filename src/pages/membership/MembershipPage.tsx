@@ -94,6 +94,10 @@ export default function MembershipPage() {
 
   const handlePurchase = async (plan: PlanLevel) => {
     if (plan === currentPlan) return;
+    if (!isAuthenticated) {
+      window.dispatchEvent(new CustomEvent('auth:required'));
+      return;
+    }
     setPurchasing(true);
     setSelectedPlan(plan);
     // 模拟购买
@@ -200,7 +204,9 @@ export default function MembershipPage() {
                     ? '当前套餐'
                     : currentPlan !== 'free' && plan.level === currentPlan
                       ? '续费'
-                      : plan.buttonLabel}
+                      : isAuthenticated
+                        ? plan.buttonLabel
+                        : '登录后开通'}
               </button>
             </div>
           );

@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import type { Signal, AlertStatus } from '../../types';
 import SignalTag from '../../components/common/SignalTag';
 import { formatPrice, formatChangePct, formatTime, getChangeColorClass } from '../../utils/format';
+import { getSignalInsight } from '../../utils/signalInsight';
 
 interface SignalCardProps {
   signal: Signal;
@@ -46,6 +47,8 @@ export default function SignalCard({
   const isAlerting = signal.alert_status === 'stop_loss' || signal.alert_status === 'warning';
   const isBuy = signal.signal_type === 'BUY';
   const floatingPnl = signal.floating_pnl ?? 0;
+  const insight = getSignalInsight(signal);
+  const triggerReasons = signal.reasons?.length ? signal.reasons : insight.triggers;
 
   return (
     <motion.div
@@ -130,6 +133,25 @@ export default function SignalCard({
                 置信度: <span className="text-orange">{signal.confidence}%</span>
               </span>
             )}
+          </div>
+
+          <div className="mt-2 grid grid-cols-[1fr_1fr_1.2fr] gap-2 text-[10px]">
+            <div className="rounded bg-bg-secondary/70 border border-border px-2 py-1">
+              <div className="text-text-muted mb-0.5">触发原因</div>
+              <div className="text-text-secondary leading-relaxed">
+                {triggerReasons.join('；')}
+              </div>
+            </div>
+            <div className="rounded bg-bg-secondary/70 border border-border px-2 py-1">
+              <div className="text-text-muted mb-0.5">风险点</div>
+              <div className="text-text-secondary leading-relaxed">
+                {insight.risks.join('；')}
+              </div>
+            </div>
+            <div className="rounded bg-orange/5 border border-orange/20 px-2 py-1">
+              <div className="text-text-muted mb-0.5">下一步</div>
+              <div className="text-orange leading-relaxed">{insight.nextStep}</div>
+            </div>
           </div>
         </div>
 

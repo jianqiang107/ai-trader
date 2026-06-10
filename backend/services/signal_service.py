@@ -13,6 +13,7 @@
   executed → closed   (卖出信号触发或止损止盈触发)
 """
 
+import asyncio
 import logging
 import random
 from datetime import datetime, timedelta, date
@@ -26,11 +27,23 @@ from models.signal import Signal
 from models.factor import FactorState
 from models.user import User
 from services.factor_service import clamp
+from services import akshare_service
 
 logger = logging.getLogger(__name__)
 
 # Free 用户每日信号可见上限
 FREE_DAILY_SIGNAL_LIMIT = 3
+
+# 主线模式不是独立策略，而是策略中心四类策略的自动组合推荐视图。
+MAINLINE_MODES = ("低吸", "趋势", "突破", "均值回归")
+MAINLINE_STRATEGY_QUOTAS = {"低吸": 3, "趋势": 3, "突破": 3, "均值回归": 3}
+# 个股模式聚焦个股层面的低吸和均值回归机会，不包含 ETF 或主线组合。
+STOCK_MODE_MODES = ("低吸", "均值回归")
+MIN_RECOMMENDATION_AMOUNT = 50_000_000
+RECOMMENDATION_PRESELECT_PER_MODE = 60
+RECOMMENDATION_LIMIT = 5
+MAX_PER_MODE = 4
+MAX_PER_SECTOR = 3
 
 
 # ---------- 策略规则配置 ----------
@@ -107,6 +120,15 @@ STRATEGY_RULES: dict[str, dict] = {
     },
 }
 
+# 来自 docs/plans/2026-06-01-ai-trader-strategy-spec.md 的产品标签权重。
+# 当前用于统一策略口径；后续接入完整因子数据后，可直接作为策略评分入口。
+STRATEGY_LABEL_WEIGHTS: dict[str, dict[str, float]] = {
+    "低吸": {"反弹潜力": 0.35, "资金热度": 0.25, "估值优势": 0.25, "涨势动力": 0.15},
+    "趋势": {"涨势动力": 0.35, "资金热度": 0.30, "市场温度": 0.20, "震荡程度": 0.15},
+    "突破": {"突破强度": 0.30, "资金热度": 0.30, "涨势动力": 0.25, "震荡程度": 0.15},
+    "均值回归": {"反弹潜力": 0.30, "估值优势": 0.30, "震荡程度": 0.25, "市场温度": 0.15},
+}
+
 # 止损止盈默认比例
 DEFAULT_STOP_TAKE: dict[str, dict[str, float]] = {
     "低吸": {"stop_loss_pct": 0.05, "take_profit_pct": 0.10},
@@ -114,21 +136,6 @@ DEFAULT_STOP_TAKE: dict[str, dict[str, float]] = {
     "突破": {"stop_loss_pct": 0.05, "take_profit_pct": 0.12},
     "均值回归": {"stop_loss_pct": 0.04, "take_profit_pct": 0.08},
 }
-
-# Mock 股票池
-MOCK_STOCKS: list[dict[str, str]] = [
-    {"code": "600519", "name": "贵州茅台"},
-    {"code": "000858", "name": "五粮液"},
-    {"code": "601318", "name": "中国平安"},
-    {"code": "000001", "name": "平安银行"},
-    {"code": "600036", "name": "招商银行"},
-    {"code": "000333", "name": "美的集团"},
-    {"code": "002415", "name": "海康威视"},
-    {"code": "600276", "name": "恒瑞医药"},
-    {"code": "000568", "name": "泸州老窖"},
-    {"code": "002304", "name": "洋河股份"},
-]
-
 
 # ---------- 置信度计算 ----------
 
@@ -145,6 +152,11 @@ def calc_confidence(strategy_type: str, factors: dict[str, float]) -> int:
     Returns:
         0-100 的置信度
     """
+    label_weights = STRATEGY_LABEL_WEIGHTS.get(strategy_type)
+    if label_weights is not None:
+        confidence = sum(weight * factors.get(label, 0) for label, weight in label_weights.items())
+        return int(clamp(round(confidence), 0, 100))
+
     rule = STRATEGY_RULES.get(strategy_type)
     if rule is None:
         return 50
@@ -300,7 +312,7 @@ async def evaluate_and_generate_signals(db: AsyncSession) -> list[Signal]:
             )
             for sig in executed_signals.scalars().all():
                 sig.status = "closed"
-                sig.actual_pnl = round(random.uniform(-0.05, 0.12), 4)  # MVP: mock
+                sig.actual_pnl = None
                 db.add(sig)
 
     if new_signals:
@@ -325,28 +337,8 @@ async def _create_buy_signal(
     Returns:
         新建的 Signal 对象，或 None
     """
-    # MVP: 随机选择一只股票
-    stock = random.choice(MOCK_STOCKS)
-    signal_price = round(random.uniform(15, 200), 2)
-    confidence = calc_confidence(strategy.type, factors)
-    stop_loss, take_profit = calc_stop_loss_take_profit(signal_price, strategy.type)
-
-    signal = Signal(
-        stock_code=stock["code"],
-        stock_name=stock["name"],
-        signal_type="BUY",
-        strategy_id=strategy.id,
-        signal_time=datetime.utcnow(),
-        signal_price=signal_price,
-        mode=strategy.type,
-        confidence=float(confidence),
-        status="pending",
-        stop_loss_price=stop_loss,
-        take_profit_price=take_profit,
-        alert_status="safe",
-    )
-    db.add(signal)
-    return signal
+    logger.warning("真实行情选股未接入，跳过策略 %s 的信号生成", strategy.id)
+    return None
 
 
 # ---------- 择时信号 ----------
@@ -381,7 +373,12 @@ async def get_timing_signals(
             pass
 
     if mode:
-        stmt = stmt.where(Signal.mode == mode)
+        if mode == "主线":
+            stmt = stmt.where(Signal.mode.in_(MAINLINE_MODES))
+        elif mode == "个股":
+            stmt = stmt.where(Signal.mode.in_(STOCK_MODE_MODES))
+        elif mode != "汇总":
+            stmt = stmt.where(Signal.mode == mode)
 
     # 仅返回用户已订阅策略的信号
     sub_stmt = select(UserSubscription.strategy_id).where(
@@ -391,12 +388,378 @@ async def get_timing_signals(
     subscribed_ids = [row[0] for row in sub_result.all()]
     if subscribed_ids:
         stmt = stmt.where(Signal.strategy_id.in_(subscribed_ids))
+    else:
+        stmt = stmt.where(Signal.id == "")
 
     stmt = stmt.order_by(Signal.signal_time.desc())
     result = await db.execute(stmt)
     signals = result.scalars().all()
 
-    return [_signal_to_dict(s) for s in signals]
+    persisted_signals = [_signal_to_dict(s) for s in signals]
+    realtime_signals = await _build_realtime_timing_signals(
+        date_str=date,
+        mode=mode,
+        subscribed_strategy_ids=subscribed_ids,
+        db=db,
+    )
+
+    existing_codes = {s["stock_code"] for s in persisted_signals}
+    merged = persisted_signals + [s for s in realtime_signals if s["stock_code"] not in existing_codes]
+    return merged
+
+
+async def _get_subscribed_strategy_types(
+    subscribed_strategy_ids: list[str],
+    db: AsyncSession,
+) -> set[str]:
+    if not subscribed_strategy_ids:
+        return set()
+    result = await db.execute(select(Strategy.type).where(Strategy.id.in_(subscribed_strategy_ids)))
+    return {row[0] for row in result.all()}
+
+
+def _is_today(date_str: str | None) -> bool:
+    if not date_str:
+        return True
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date() == date.today()
+    except ValueError:
+        return False
+
+
+def _allowed_modes(mode: str | None) -> tuple[str, ...]:
+    if mode == "主线":
+        return MAINLINE_MODES
+    if mode == "个股":
+        return STOCK_MODE_MODES
+    if mode in STRATEGY_RULES:
+        return (mode,)
+    if mode == "汇总" or mode is None:
+        return tuple(STRATEGY_RULES.keys())
+    return tuple()
+
+
+def _score_realtime_stock(stock: dict, mode: str) -> int:
+    change_pct = float(stock.get("change_pct") or 0)
+    turnover_rate = float(stock.get("turnover_rate") or 0)
+    amplitude = float(stock.get("amplitude") or 0)
+    amount = float(stock.get("amount") or 0)
+    amount_score = min(amount / 10_000_000_000 * 20, 20)
+    sector_heat = _sector_heat_score(stock)
+    limit_up_score = _limit_up_candidate_score(stock)
+
+    if mode == "趋势":
+        score = 45 + change_pct * 7 + min(turnover_rate, 8) * 3 + amount_score + sector_heat * 0.12
+    elif mode == "突破":
+        score = 40 + max(change_pct, 0) * 5 + min(turnover_rate, 10) * 4 + min(amplitude, 8) * 3 + limit_up_score * 0.25
+    elif mode == "低吸":
+        dip_score = max(0, min(3, -change_pct)) * 12
+        strong_dip_score = min(limit_up_score, 35) if 3 <= change_pct < 9.8 else 0
+        score = 50 + dip_score + strong_dip_score + min(turnover_rate, 6) * 3 + amount_score + sector_heat * 0.16
+    elif mode == "均值回归":
+        score = 45 + max(0, min(6, amplitude)) * 5 + max(0, 2 - abs(change_pct)) * 8 + sector_heat * 0.08
+    else:
+        score = 0
+
+    return int(clamp(round(score), 0, 100))
+
+
+def _sector_heat_score(stock: dict) -> float:
+    return float(stock.get("sector_heat") or 0)
+
+
+def _limit_up_candidate_score(stock: dict) -> float:
+    change_pct = float(stock.get("change_pct") or 0)
+    turnover_rate = float(stock.get("turnover_rate") or 0)
+    amount = float(stock.get("amount") or 0)
+    sector_heat = _sector_heat_score(stock)
+    if change_pct < 3 or change_pct >= 10.05:
+        return 0
+    distance_score = max(0, 10 - change_pct) * 3 if change_pct < 9.7 else 35
+    liquidity_score = min(amount / 5_000_000_000 * 20, 20)
+    turnover_score = min(turnover_rate, 8) * 3
+    return min(100, sector_heat * 0.35 + distance_score + liquidity_score + turnover_score)
+
+
+def _threshold_for_mode(mode: str) -> int:
+    return 70 if mode in ("趋势", "突破") else 65
+
+
+def _explain_realtime_stock(stock: dict, mode: str, confidence: int, source: str) -> dict:
+    change_pct = float(stock.get("change_pct") or 0)
+    turnover_rate = float(stock.get("turnover_rate") or 0)
+    amplitude = float(stock.get("amplitude") or 0)
+    amount = float(stock.get("amount") or 0)
+    amount_yi = amount / 100_000_000
+    sector_name = str(stock.get("sector_name") or "相关板块")
+    sector_heat = _sector_heat_score(stock)
+    limit_up_score = _limit_up_candidate_score(stock)
+
+    score_breakdown = {
+        "涨跌幅": round(change_pct, 2),
+        "换手率": round(turnover_rate, 2),
+        "振幅": round(amplitude, 2),
+        "成交额_亿": round(amount_yi, 2),
+        "sector_heat": round(sector_heat, 2),
+        "涨停候选分": round(limit_up_score, 2),
+        "综合分": confidence,
+    }
+
+    if mode == "趋势":
+        reasons = [
+            f"涨跌幅 {change_pct:.2f}% 显示短线趋势强度",
+            f"成交额 {amount_yi:.1f} 亿，流动性满足观察条件",
+            f"换手率 {turnover_rate:.2f}% 支撑趋势延续判断",
+        ]
+    elif mode == "突破":
+        reasons = [
+            f"{sector_name}板块强度 {sector_heat:.0f}，具备题材联动基础",
+            f"涨停候选分 {limit_up_score:.0f}，涨幅 {change_pct:.2f}% 接近突破确认区",
+            f"成交额 {amount_yi:.1f} 亿，具备量能基础",
+        ]
+    elif mode == "低吸":
+        if limit_up_score >= 55 and change_pct >= 3:
+            limit_up_text = (
+                f"当前涨幅 {change_pct:.2f}% 已接近/触及涨停，只适合等待开板回踩承接"
+                if change_pct >= 9.7
+                else f"当前涨幅 {change_pct:.2f}% 仍在涨停候选区"
+            )
+            reasons = [
+                f"强势低吸：{sector_name}板块强度 {sector_heat:.0f}，题材内有涨停候选",
+                f"涨停候选分 {limit_up_score:.0f}，{limit_up_text}",
+                f"成交额 {amount_yi:.1f} 亿、换手率 {turnover_rate:.2f}%，适合观察回踩承接",
+            ]
+        else:
+            reasons = [
+                f"涨跌幅 {change_pct:.2f}% 后进入低吸观察区",
+                f"成交额 {amount_yi:.1f} 亿，流动性尚可",
+                f"换手率 {turnover_rate:.2f}% 支持分批观察",
+            ]
+    else:
+        reasons = [
+            f"振幅 {amplitude:.2f}% 显示均值回归空间",
+            f"涨跌幅 {change_pct:.2f}% 接近修复观察区",
+            f"成交额 {amount_yi:.1f} 亿，交易活跃度可观察",
+        ]
+
+    return {
+        "reasons": reasons,
+        "score_breakdown": score_breakdown,
+        "data_source": source == "tencent" and "tencent" or source,
+    }
+
+
+def _is_tradeable_candidate(stock: dict) -> bool:
+    name = str(stock.get("name") or "")
+    price = float(stock.get("price") or 0)
+    volume = float(stock.get("volume") or 0)
+    return (
+        "ST" not in name.upper()
+        and "退" not in name
+        and price > 1
+        and volume > 0
+    )
+
+
+def _filter_recommendation_universe(stocks: list[dict]) -> list[dict]:
+    result = []
+    for stock in stocks:
+        name = str(stock.get("name") or "")
+        code = str(stock.get("code") or "")
+        price = float(stock.get("price") or 0)
+        volume = float(stock.get("volume") or 0)
+        amount = float(stock.get("amount") or 0)
+        if not code or not name:
+            continue
+        if "ST" in name.upper() or "退" in name:
+            continue
+        if price <= 1 or volume <= 0 or amount < MIN_RECOMMENDATION_AMOUNT:
+            continue
+        result.append(stock)
+    return result
+
+
+def _preselection_score(stock: dict, mode: str) -> float:
+    change_pct = float(stock.get("change_pct") or 0)
+    turnover_rate = float(stock.get("turnover_rate") or 0)
+    amplitude = float(stock.get("amplitude") or 0)
+    amount = float(stock.get("amount") or 0)
+    liquidity = min(amount / 1_000_000_000, 10)
+
+    if mode == "低吸":
+        return max(0, -change_pct) * 3 + amplitude + liquidity
+    if mode == "趋势":
+        return max(0, change_pct) * 3 + turnover_rate + liquidity
+    if mode == "突破":
+        return max(0, change_pct) * 2 + turnover_rate * 1.5 + amplitude + liquidity
+    return max(0, 2 - abs(change_pct)) * 3 + amplitude + liquidity
+
+
+def _preselect_recommendation_candidates(
+    stocks: list[dict],
+    per_mode_limit: int = RECOMMENDATION_PRESELECT_PER_MODE,
+) -> dict[str, list[dict]]:
+    result = {}
+    for mode in MAINLINE_MODES:
+        ranked = sorted(
+            stocks,
+            key=lambda stock: _preselection_score(stock, mode),
+            reverse=True,
+        )
+        result[mode] = ranked[:per_mode_limit]
+    return result
+
+
+def _realtime_signal_from_stock(
+    stock: dict,
+    mode: str,
+    confidence: int,
+    source: str,
+    *,
+    trade_date: str | None = None,
+    secondary_modes: list[str] | None = None,
+    market_rank: int | None = None,
+    quote_updated_at: str | None = None,
+) -> dict:
+    price = float(stock.get("price") or 0)
+    stop_loss, take_profit = calc_stop_loss_take_profit(price, mode)
+    code = str(stock.get("code") or "")
+    explanation = _explain_realtime_stock(stock, mode, confidence, source)
+    current_trade_date = trade_date or date.today().isoformat()
+    return {
+        "id": f"rt-{current_trade_date}-{mode}-{code}",
+        "stock_code": code,
+        "stock_name": stock.get("name") or code,
+        "signal_type": "BUY",
+        "strategy_id": f"realtime-{mode}",
+        "signal_time": datetime.utcnow().isoformat(),
+        "signal_price": price,
+        "mode": mode,
+        "confidence": confidence,
+        "status": "pending",
+        "stop_loss_price": stop_loss,
+        "take_profit_price": take_profit,
+        "alert_status": "safe",
+        "actual_pnl": None,
+        "holding_days": None,
+        "current_price": price,
+        "floating_pnl": None,
+        "secondary_modes": secondary_modes or [],
+        "market_rank": market_rank,
+        "quote_updated_at": quote_updated_at,
+        "sector_name": str(stock.get("sector_name") or ""),
+        **explanation,
+    }
+
+
+def _select_diversified_recommendations(
+    candidates_by_mode: dict[str, list[dict]],
+    limit: int = RECOMMENDATION_LIMIT,
+) -> list[dict]:
+    all_candidates = [
+        signal
+        for mode_candidates in candidates_by_mode.values()
+        for signal in mode_candidates
+    ]
+    all_candidates.sort(
+        key=lambda signal: (
+            int(signal.get("confidence") or 0),
+            float(signal.get("score_breakdown", {}).get("成交额_亿") or 0),
+        ),
+        reverse=True,
+    )
+
+    selected = []
+    selected_codes = set()
+    mode_counts = {mode: 0 for mode in MAINLINE_MODES}
+    sector_counts: dict[str, int] = {}
+
+    for signal in all_candidates:
+        code = signal["stock_code"]
+        mode = signal["mode"]
+        sector = signal.get("sector_name") or ""
+        if code in selected_codes:
+            continue
+        if mode_counts.get(mode, 0) >= MAX_PER_MODE:
+            continue
+        if sector and sector_counts.get(sector, 0) >= MAX_PER_SECTOR:
+            continue
+
+        selected.append(signal)
+        selected_codes.add(code)
+        mode_counts[mode] = mode_counts.get(mode, 0) + 1
+        if sector:
+            sector_counts[sector] = sector_counts.get(sector, 0) + 1
+        if len(selected) >= limit:
+            break
+
+    for rank, signal in enumerate(selected, start=1):
+        signal["market_rank"] = rank
+    return selected
+
+
+def _build_diversified_realtime_signals(
+    preselected: dict[str, list[dict]],
+    allowed_modes: list[str],
+    source: str,
+    limit: int = RECOMMENDATION_LIMIT,
+    quote_updated_at: str | None = None,
+) -> list[dict]:
+    passing_by_code: dict[str, list[tuple[str, int]]] = {}
+    stock_by_code: dict[str, dict] = {}
+    for candidate_mode in allowed_modes:
+        for stock in preselected.get(candidate_mode, []):
+            confidence = _score_realtime_stock(stock, candidate_mode)
+            if confidence >= _threshold_for_mode(candidate_mode):
+                code = str(stock.get("code") or "")
+                stock_by_code[code] = stock
+                passing_by_code.setdefault(code, []).append((candidate_mode, confidence))
+
+    candidates_by_mode: dict[str, list[dict]] = {mode: [] for mode in allowed_modes}
+    for code, passing_modes in passing_by_code.items():
+        passing_modes.sort(key=lambda item: item[1], reverse=True)
+        primary_mode, confidence = passing_modes[0]
+        signal = _realtime_signal_from_stock(
+            stock_by_code[code],
+            primary_mode,
+            confidence,
+            source,
+            secondary_modes=[mode for mode, _ in passing_modes[1:]],
+            quote_updated_at=quote_updated_at,
+        )
+        candidates_by_mode.setdefault(primary_mode, []).append(signal)
+
+    return _select_diversified_recommendations(candidates_by_mode, limit=limit)
+
+
+async def _build_realtime_timing_signals(
+    date_str: str | None,
+    mode: str | None,
+    subscribed_strategy_ids: list[str],
+    db: AsyncSession,
+) -> list[dict]:
+    if not _is_today(date_str):
+        return []
+
+    _ = subscribed_strategy_ids, db
+    allowed_modes = list(_allowed_modes(mode))
+    if not allowed_modes:
+        return []
+
+    stock_data = await asyncio.to_thread(akshare_service.get_full_market_stock_list)
+    source = stock_data.get("source", "unavailable")
+    if source != "eastmoney":
+        logger.warning("全市场行情源不可用，跳过实时推荐生成: source=%s", source)
+        return []
+
+    stocks = _filter_recommendation_universe(stock_data.get("items", []))
+    preselected = _preselect_recommendation_candidates(stocks)
+    return _build_diversified_realtime_signals(
+        preselected,
+        allowed_modes,
+        source,
+        quote_updated_at=stock_data.get("quote_updated_at"),
+    )
 
 
 # ---------- 市场情绪信号 (mock) ----------
@@ -479,9 +842,6 @@ async def get_live_signals(
     sub_result = await db.execute(sub_stmt)
     subscribed_ids = [row[0] for row in sub_result.all()]
 
-    if not subscribed_ids:
-        return []
-
     # 基础查询
     stmt = select(Signal).where(
         Signal.strategy_id.in_(subscribed_ids),
@@ -527,12 +887,35 @@ async def get_live_signals(
 
     result = await db.execute(stmt)
     signals = result.scalars().all()
+    live_signals = [_signal_to_dict(s) for s in signals]
+
+    realtime_live_signals: list[dict] = []
+    if (
+        period == "today"
+        and (not signal_type or signal_type in ("all", "BUY"))
+        and not only_holding
+        and not only_alerting
+    ):
+        realtime_live_signals = await _build_realtime_timing_signals(
+            date_str=date.today().strftime("%Y-%m-%d"),
+            mode="汇总",
+            subscribed_strategy_ids=subscribed_ids,
+            db=db,
+        )
+        if search:
+            realtime_live_signals = [
+                s for s in realtime_live_signals
+                if search in s["stock_code"] or search in s["stock_name"]
+            ]
+
+    existing_codes = {s["stock_code"] for s in live_signals}
+    live_signals.extend([s for s in realtime_live_signals if s["stock_code"] not in existing_codes])
 
     # Free 用户每日可见上限
-    if user_plan == "free" and len(signals) > FREE_DAILY_SIGNAL_LIMIT:
-        signals = signals[:FREE_DAILY_SIGNAL_LIMIT]
+    if user_plan == "free" and len(live_signals) > FREE_DAILY_SIGNAL_LIMIT:
+        live_signals = live_signals[:FREE_DAILY_SIGNAL_LIMIT]
 
-    return [_signal_to_dict(s) for s in signals]
+    return live_signals
 
 
 async def get_live_stats(
@@ -555,15 +938,6 @@ async def get_live_stats(
     sub_result = await db.execute(sub_stmt)
     subscribed_ids = [row[0] for row in sub_result.all()]
 
-    if not subscribed_ids:
-        return {
-            "today_count": 0,
-            "holding": 0,
-            "take_profit": 0,
-            "stop_loss": 0,
-            "alerting": 0,
-        }
-
     now = datetime.utcnow()
     today = now.date()
 
@@ -574,6 +948,13 @@ async def get_live_stats(
             func.date(Signal.signal_time) == today,
         )
     ) or 0
+    realtime_stats_signals = await _build_realtime_timing_signals(
+        date_str=today.strftime("%Y-%m-%d"),
+        mode="汇总",
+        subscribed_strategy_ids=subscribed_ids,
+        db=db,
+    )
+    today_count += len(realtime_stats_signals)
 
     # 持仓中 (executed)
     holding = await db.scalar(
@@ -634,6 +1015,10 @@ async def execute_signal(
     Raises:
         AppException: 信号不存在 (3001) / 状态不允许 (3002)
     """
+    if signal_id.startswith("rt-"):
+        logger.info("实时信号 %s 已执行 by 用户 %s (no-op)", signal_id, user_id)
+        return
+
     stmt = select(Signal).where(Signal.id == signal_id)
     result = await db.execute(stmt)
     signal = result.scalars().first()
@@ -669,6 +1054,10 @@ async def ignore_signal(
     Raises:
         AppException: 信号不存在 (3001) / 状态不允许 (3002)
     """
+    if signal_id.startswith("rt-"):
+        logger.info("实时信号 %s 已忽略 by 用户 %s (no-op)", signal_id, user_id)
+        return
+
     stmt = select(Signal).where(Signal.id == signal_id)
     result = await db.execute(stmt)
     signal = result.scalars().first()
@@ -706,6 +1095,10 @@ async def set_alert(
     Raises:
         AppException: 信号不存在 (3001)
     """
+    if signal_id.startswith("rt-"):
+        logger.info("实时信号 %s 预警设置 by 用户 %s (no-op)", signal_id, user_id)
+        return
+
     stmt = select(Signal).where(Signal.id == signal_id)
     result = await db.execute(stmt)
     signal = result.scalars().first()
@@ -767,14 +1160,8 @@ def _signal_to_dict(s: Signal) -> dict:
     if s.status == "executed" and s.signal_time:
         holding_days = (datetime.utcnow() - s.signal_time).days
 
-    # 计算浮动盈亏 (MVP: mock)
     current_price = None
     floating_pnl = None
-    if s.status == "executed":
-        current_price = round(s.signal_price * random.uniform(0.92, 1.12), 2)
-        floating_pnl = round(
-            (current_price - s.signal_price) / s.signal_price * 100, 2
-        )
 
     return {
         "id": s.id,

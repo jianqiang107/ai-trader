@@ -20,7 +20,7 @@ class RegisterRequest(BaseModel):
     """注册请求"""
 
     phone: str = Field(..., min_length=11, max_length=11, description="手机号")
-    code: str = Field(..., min_length=4, max_length=6, description="验证码")
+    password: str = Field(..., min_length=8, max_length=64, description="密码")
     nickname: str = Field(..., min_length=1, max_length=50, description="昵称")
 
 
@@ -28,7 +28,7 @@ class LoginRequest(BaseModel):
     """登录请求"""
 
     phone: str = Field(..., min_length=11, max_length=11, description="手机号")
-    code: str = Field(..., min_length=4, max_length=6, description="验证码")
+    password: str = Field(..., min_length=8, max_length=64, description="密码")
 
 
 class RefreshTokenRequest(BaseModel):

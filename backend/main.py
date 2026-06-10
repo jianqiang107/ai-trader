@@ -125,6 +125,16 @@ app.include_router(watchlist.router, prefix="/api")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 if os.path.isdir(STATIC_DIR):
+    def _serve_spa_file(path: str) -> FileResponse:
+        return FileResponse(
+            path,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+
     # 静态资源 (/assets/*.js, /assets/*.css)
     assets_dir = os.path.join(STATIC_DIR, "assets")
     if os.path.isdir(assets_dir):
@@ -135,7 +145,7 @@ if os.path.isdir(STATIC_DIR):
     async def serve_spa(full_path: str):
         file_path = os.path.join(STATIC_DIR, full_path)
         if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+            return _serve_spa_file(file_path)
+        return _serve_spa_file(os.path.join(STATIC_DIR, "index.html"))
 
     print(f"[Static] 前端静态文件托管已启用: {STATIC_DIR}")

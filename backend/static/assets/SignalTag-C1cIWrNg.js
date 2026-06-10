@@ -1,0 +1,1 @@
+import{j as e}from"./mui-DAswjEfs.js";import{p as n}from"./index-S7cQVaS7.js";function l({tag:r,className:s=""}){const o=n[r]||n.低吸;return e.jsx("span",{className:`inline-block px-1.5 py-0.5 rounded text-[10px] leading-tight ${s}`,style:{background:o.bg,color:o.color,border:`1px solid ${o.border}`},children:r})}export{l as S};

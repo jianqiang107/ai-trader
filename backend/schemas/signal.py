@@ -28,6 +28,10 @@ class SignalOut(BaseModel):
     holding_days: int | None = Field(None, description="持仓天数（计算字段）")
     current_price: float | None = Field(None, description="当前价格（计算字段）")
     floating_pnl: float | None = Field(None, description="浮动盈亏百分比（计算字段）")
+    secondary_modes: list[str] = Field(default_factory=list)
+    market_rank: int | None = None
+    quote_updated_at: str | None = None
+    sector_name: str | None = None
 
     model_config = {"from_attributes": True}
 

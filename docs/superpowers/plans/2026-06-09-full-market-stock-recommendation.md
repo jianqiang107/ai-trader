@@ -318,7 +318,7 @@ Add constants and helper in `backend/services/signal_service.py`:
 ```python
 MIN_RECOMMENDATION_AMOUNT = 50_000_000
 RECOMMENDATION_PRESELECT_PER_MODE = 60
-RECOMMENDATION_LIMIT = 12
+RECOMMENDATION_LIMIT = 5
 MAX_PER_MODE = 4
 MAX_PER_SECTOR = 3
 
@@ -435,7 +435,7 @@ def test_final_selection_deduplicates_stocks_and_limits_sector_concentration() -
         "均值回归": [],
     }
 
-    selected = signal_service._select_diversified_recommendations(scored, limit=12)
+    selected = signal_service._select_diversified_recommendations(scored, limit=5)
 
     codes = [item["stock_code"] for item in selected]
     assert len(codes) == len(set(codes))
@@ -988,7 +988,7 @@ Then log in through the web UI and verify:
 
 1. Recommendations appear without adding any stocks to the watchlist.
 2. Recommendations appear even when strategy subscriptions are absent.
-3. The recommendation list is at most 12 stocks.
+3. The recommendation list is at most 5 stocks.
 4. No stock appears twice.
 5. No sector appears more than three times.
 6. Refreshing after the quote cache expires recalculates from current full-market data.

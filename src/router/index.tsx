@@ -21,9 +21,6 @@ function LoadingFallback() {
   );
 }
 
-/** 需要认证才能访问的路由列表 */
-const PROTECTED_PATHS = ['/signals', '/watchlist', '/membership'];
-
 export default function AppRouter() {
   return (
     <Suspense fallback={<LoadingFallback />}>
@@ -37,6 +34,7 @@ export default function AppRouter() {
           <Route path="/sectors" element={<SectorsPage />} />
           <Route path="/stocks" element={<StocksPage />} />
           <Route path="/news" element={<NewsPage />} />
+          <Route path="/membership" element={<MembershipPage />} />
 
           {/* 受保护页面：需要认证才能访问 */}
           <Route
@@ -46,10 +44,6 @@ export default function AppRouter() {
           <Route
             path="/watchlist"
             element={<ProtectedRoute><WatchlistPage /></ProtectedRoute>}
-          />
-          <Route
-            path="/membership"
-            element={<ProtectedRoute><MembershipPage /></ProtectedRoute>}
           />
         </Route>
       </Routes>

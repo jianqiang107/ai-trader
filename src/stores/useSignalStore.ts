@@ -9,6 +9,8 @@ interface SignalState {
   liveSignals: Signal[];
   liveStats: LiveSignalStats;
   liveFilter: LiveSignalFilter;
+  liveLoading: boolean;
+  liveError: string;
   selectedStock: { code: string; name: string } | null;
   selectedChartTab: 'fenshi' | 'liangjiao' | 'macd' | 'kdj';
   fetchTimingSignals: (date: string, mode: string) => Promise<void>;
@@ -28,6 +30,8 @@ export const useSignalStore = create<SignalState>((set, get) => ({
   liveSignals: [],
   liveStats: { today_count: 0, holding: 0, take_profit: 0, stop_loss: 0, alerting: 0 },
   liveFilter: { type: 'all', period: 'today' },
+  liveLoading: false,
+  liveError: '',
   selectedStock: null,
   selectedChartTab: 'fenshi',
 
@@ -55,14 +59,22 @@ export const useSignalStore = create<SignalState>((set, get) => ({
   },
 
   fetchLiveSignals: async () => {
+    set({ liveLoading: true, liveError: '' });
     try {
-      const [signals, stats] = await Promise.all([
-        signalService.getLiveSignals(get().liveFilter),
-        signalService.getLiveStats(),
-      ]);
-      set({ liveSignals: signals, liveStats: stats });
+      const signals = await signalService.getLiveSignals(get().liveFilter);
+      set({ liveSignals: signals });
+
+      try {
+        const stats = await signalService.getLiveStats();
+        set({ liveStats: stats });
+      } catch (statsError) {
+        console.error('Failed to fetch live stats:', statsError);
+      }
     } catch (e) {
       console.error('Failed to fetch live signals:', e);
+      set({ liveError: '实盘信号加载失败，请稍后重试。' });
+    } finally {
+      set({ liveLoading: false });
     }
   },
 
@@ -86,6 +98,7 @@ export const useSignalStore = create<SignalState>((set, get) => ({
       }));
     } catch (e) {
       console.error('Failed to acknowledge signal:', e);
+      throw e;
     }
   },
 
@@ -99,6 +112,7 @@ export const useSignalStore = create<SignalState>((set, get) => ({
       }));
     } catch (e) {
       console.error('Failed to set alert:', e);
+      throw e;
     }
   },
 
@@ -106,5 +120,6 @@ export const useSignalStore = create<SignalState>((set, get) => ({
     set((state) => ({
       liveFilter: { ...state.liveFilter, ...filter },
     }));
+    get().fetchLiveSignals();
   },
 }));

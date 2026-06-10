@@ -7,9 +7,9 @@ interface UseAuthReturn {
   isAuthenticated: boolean;
   notifications: Notification[];
   unreadCount: number;
-  login: (phone: string, code: string) => Promise<void>;
+  login: (phone: string, password: string) => Promise<void>;
   logout: () => void;
-  register: (phone: string, code: string, nickname: string) => Promise<void>;
+  register: (phone: string, password: string, nickname: string) => Promise<void>;
   fetchProfile: () => Promise<void>;
   fetchNotifications: () => Promise<void>;
   markNotificationRead: (id: string) => void;
@@ -40,13 +40,13 @@ export function useAuth(): UseAuthReturn {
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
 
   /** 登录（封装Store方法，接收单独参数） */
-  const login = useCallback(async (phone: string, code: string) => {
-    await storeLogin({ phone, code });
+  const login = useCallback(async (phone: string, password: string) => {
+    await storeLogin({ phone, password });
   }, [storeLogin]);
 
   /** 注册（封装Store方法，接收单独参数） */
-  const register = useCallback(async (phone: string, code: string, nickname: string) => {
-    await storeRegister({ phone, code, nickname });
+  const register = useCallback(async (phone: string, password: string, nickname: string) => {
+    await storeRegister({ phone, password, nickname });
   }, [storeRegister]);
 
   /** 已登录时自动拉取用户信息 */

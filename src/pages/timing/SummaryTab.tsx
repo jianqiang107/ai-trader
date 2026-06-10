@@ -3,7 +3,15 @@ import DataTable from '../../components/common/DataTable';
 import SignalTag from '../../components/common/SignalTag';
 import { useSignalStore } from '../../stores/useSignalStore';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { formatChangePct, formatPrice } from '../../utils/format';
+import { formatPrice } from '../../utils/format';
+import {
+  deduplicateSummarySignals,
+  formatSignedPct,
+  getDailyChangePct,
+  getSelectionReturnPct,
+  getTodayPnlPct,
+  pnlClassName,
+} from '../../utils/summarySignal';
 import type { Signal, SignalTagType } from '../../types';
 
 export default function SummaryTab() {
@@ -12,30 +20,82 @@ export default function SummaryTab() {
   const selectedStock = useSignalStore((s) => s.selectedStock);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-  // 直接从 store 获取真实数据，不再注入假数据
   const signals = useMemo(() => {
-    return Object.values(timingSignals).flat();
+    return deduplicateSummarySignals(Object.values(timingSignals).flat())
+      .sort((a, b) => (getDailyChangePct(b) ?? -Infinity) - (getDailyChangePct(a) ?? -Infinity));
   }, [timingSignals]);
 
   const columns = useMemo(() => [
     { key: 'index', title: '序号', width: 40, render: (_: unknown, __: unknown, i: number) => <span className="text-text-muted">{i + 1}</span> },
-    { key: 'stock_code', title: '代码', width: 65, render: (v: unknown) => <span className="text-blue">{v as string}</span> },
-    { key: 'stock_name', title: '名称', width: 65, render: (v: unknown) => <span className="text-text-primary">{v as string}</span> },
-    { key: 'mode', title: '入选模式', width: 65, render: (v: unknown) => <SignalTag tag={v as SignalTagType} /> },
-    { key: 'confidence', title: '置信度', width: 50, render: (v: unknown) => <span className="text-orange">{v as number}%</span> },
-    { key: 'signal_price', title: '入选价', width: 55, render: (v: unknown) => formatPrice(v as number) },
-    { key: 'floating_pnl', title: '浮动盈亏', width: 65, render: (v: unknown) => {
-      const val = v as number | null;
-      if (val === null) return <span className="text-text-muted">-</span>;
-      return <span className={val >= 0 ? 'rise' : 'fall'}>{formatChangePct(val)}</span>;
-    }},
-    { key: 'alert_status', title: '预警', width: 45, render: (v: unknown) => {
-      const status = v as string;
-      if (status === 'take_profit') return <span className="rise text-[10px]">止盈</span>;
-      if (status === 'stop_loss') return <span className="fall text-[10px]">止损</span>;
-      if (status === 'warning') return <span className="text-orange text-[10px]">预警</span>;
-      return <span className="text-text-muted text-[10px]">正常</span>;
-    }},
+    {
+      key: 'stock_code',
+      title: '代码',
+      width: 72,
+      sorter: (a: Signal, b: Signal) => a.stock_code.localeCompare(b.stock_code),
+      render: (v: unknown) => <span className="font-semibold text-[#f3f600]">{String(v).split('.')[0]}</span>,
+    },
+    {
+      key: 'stock_name',
+      title: '名称',
+      width: 76,
+      sorter: (a: Signal, b: Signal) => a.stock_name.localeCompare(b.stock_name, 'zh-CN'),
+      render: (v: unknown) => <span className="font-semibold text-[#f3f600]">{v as string}</span>,
+    },
+    {
+      key: 'mode',
+      title: '入选模式',
+      width: 72,
+      sorter: (a: Signal, b: Signal) => a.mode.localeCompare(b.mode, 'zh-CN'),
+      render: (v: unknown) => <SignalTag tag={v as SignalTagType} />,
+    },
+    {
+      key: 'sector_name',
+      title: '入选板块',
+      width: 94,
+      sorter: (a: Signal, b: Signal) => (a.sector_name || '').localeCompare(b.sector_name || '', 'zh-CN'),
+      render: (v: unknown) => (
+        <span className="block truncate text-blue" title={String(v || '未分类')}>
+          {String(v || '未分类')}
+        </span>
+      ),
+    },
+    {
+      key: 'daily_change_pct',
+      title: '涨幅',
+      width: 68,
+      sorter: (a: Signal, b: Signal) => (getDailyChangePct(a) ?? -Infinity) - (getDailyChangePct(b) ?? -Infinity),
+      render: (_: unknown, row: Signal) => {
+        const value = getDailyChangePct(row);
+        return <span className={`font-semibold ${pnlClassName(value)}`}>{formatSignedPct(value)}</span>;
+      },
+    },
+    {
+      key: 'signal_price',
+      title: '入选价格',
+      width: 76,
+      sorter: (a: Signal, b: Signal) => a.signal_price - b.signal_price,
+      render: (v: unknown) => <span className="text-text-primary">{formatPrice(v as number)}</span>,
+    },
+    {
+      key: 'selection_return_pct',
+      title: '入选涨幅',
+      width: 78,
+      sorter: (a: Signal, b: Signal) => (getSelectionReturnPct(a) ?? -Infinity) - (getSelectionReturnPct(b) ?? -Infinity),
+      render: (_: unknown, row: Signal) => {
+        const value = getSelectionReturnPct(row);
+        return <span className={pnlClassName(value)}>{formatSignedPct(value)}</span>;
+      },
+    },
+    {
+      key: 'today_pnl_pct',
+      title: '今日盈亏',
+      width: 78,
+      sorter: (a: Signal, b: Signal) => (getTodayPnlPct(a) ?? -Infinity) - (getTodayPnlPct(b) ?? -Infinity),
+      render: (_: unknown, row: Signal) => {
+        const value = getTodayPnlPct(row);
+        return <span className={pnlClassName(value)}>{formatSignedPct(value)}</span>;
+      },
+    },
   ], []);
 
   return (
@@ -43,15 +103,16 @@ export default function SummaryTab() {
       <div className="h-7 bg-[#141414] border-b border-border flex items-center px-2.5 gap-1.5 shrink-0">
         <div className="w-1.5 h-1.5 rounded-full bg-orange" />
         <span className="text-text-primary text-[11px] font-medium">个股汇总</span>
+        <span className="text-text-muted text-[10px]">按当日涨幅排序</span>
         <span className="ml-auto text-text-muted text-[11px]">{signals.length} 只</span>
       </div>
       <div className="flex-1 overflow-hidden">
         {signals.length > 0 ? (
-          <DataTable
+          <DataTable<Signal>
             columns={columns}
-            data={signals as unknown as Record<string, unknown>[]}
-            rowKey="id"
-            onRowClick={(row) => selectStock((row as unknown as Signal).stock_code, (row as unknown as Signal).stock_name)}
+            data={signals}
+            rowKey="stock_code"
+            onRowClick={(row) => selectStock(row.stock_code, row.stock_name)}
             selectedRowKey={selectedStock?.code}
           />
         ) : (
