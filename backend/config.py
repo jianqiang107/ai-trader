@@ -16,7 +16,12 @@ class Settings:
     PROJECT_NAME: str = "AI Trader API"
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-    DATABASE_URL: str = "sqlite+aiosqlite:///./ai_trader.db"
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "sqlite+aiosqlite:////tmp/ai_trader.db"
+        if os.getenv("VERCEL") == "1"
+        else "sqlite+aiosqlite:///./ai_trader.db",
+    )
     JWT_SECRET: str = os.getenv("JWT_SECRET", "ai-trader-secret-key-change-in-production")
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120  # 2小时
